@@ -111,13 +111,16 @@ export default function App() {
               )}
             </button>
           </form>
-        </div>
 
-        {/* Rodapé */}
-        <div className="mt-8 text-center text-white/80">
-          <p className="text-[10px] tracking-wide">
-            Reserva - PR // Brasil • <span className="font-bold text-white">Criado por Prof. Lucas Mercer Leniar</span>
-          </p>
+          {/* Rodapé Interno */}
+          <div className="mt-10 text-center space-y-1.5 border-t border-slate-50 pt-8">
+            <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">
+              Reserva - PR // Brasil
+            </p>
+            <p className="text-[11px] font-bold text-slate-800">
+              Criado por Prof. Lucas Mercer Leniar
+            </p>
+          </div>
         </div>
       </div>
     </div>
