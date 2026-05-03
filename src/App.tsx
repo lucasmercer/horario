@@ -44,7 +44,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#657c36] flex items-center justify-center p-4 font-sans selection:bg-slate-200">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-lg">
         {/* Card de Login */}
         <div className="bg-white rounded-3xl shadow-2xl shadow-black/20 p-8 pt-10 md:p-10 md:pt-12">
           {/* Cabeçalho */}
@@ -55,7 +55,7 @@ export default function App() {
             <h1 className="text-2xl font-black text-slate-900 tracking-tight">
               Horários CECM
             </h1>
-            <p className="text-[11px] font-bold text-slate-400 mt-2 tracking-wide leading-tight whitespace-nowrap">
+            <p className="text-[12px] font-bold text-slate-400 mt-2 tracking-wide leading-tight">
               Colégio Estadual Cívico-Militar Gregório Szeremeta
             </p>
           </div>
@@ -92,7 +92,7 @@ export default function App() {
             {error && (
               <div className="flex items-center gap-3 text-red-600 bg-red-50 p-4 rounded-xl border border-red-100 transition-all duration-300">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <p className="text-xs font-bold uppercase tracking-tight">{error}</p>
+                <p className="text-xs font-bold tracking-tight">{error}</p>
               </div>
             )}
 
@@ -114,8 +114,8 @@ export default function App() {
         </div>
 
         {/* Rodapé */}
-        <div className="mt-8 text-center">
-          <p className="text-[10px] text-white/70 font-medium tracking-wide">
+        <div className="mt-8 text-center text-white/80">
+          <p className="text-[10px] tracking-wide">
             Reserva - PR // Brasil • <span className="font-bold text-white">Criado por Prof. Lucas Mercer Leniar</span>
           </p>
         </div>
