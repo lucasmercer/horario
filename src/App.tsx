@@ -4,15 +4,11 @@
  */
 
 import { useState, useEffect, type FormEvent } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
-  User, 
   Lock, 
   ChevronRight, 
   GraduationCap, 
-  AlertCircle,
-  Clock,
-  ExternalLink
+  AlertCircle
 } from 'lucide-react';
 
 export default function App() {
@@ -21,37 +17,34 @@ export default function App() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  useEffect(() => {
+    console.log("App mounted");
+  }, []);
+
   const handleLogin = (e: FormEvent) => {
     e.preventDefault();
     setError('');
     
     if (!password) {
-      setError('Por favor, digite a senha.');
+      setError('POR FAVOR, DIGITE O CÓDIGO.');
       return;
     }
 
     setIsLoading(true);
     
-    // Verificando a senha ccm2024
     setTimeout(() => {
       setIsLoading(false);
       if (password === 'ccm2024') {
-        // Redirecionamento simulado ou sucesso
         window.location.href = 'https://lucasmercer.github.io/horario';
       } else {
-        setError('Senha incorreta. Tente novamente.');
+        setError('CÓDIGO INCORRETO. TENTE NOVAMENTE.');
       }
     }, 800);
   };
 
   return (
     <div className="min-h-screen bg-[#657c36] flex items-center justify-center p-4 font-sans selection:bg-slate-200">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="w-full max-w-sm"
-      >
+      <div className="w-full max-w-sm">
         {/* Card de Login */}
         <div className="bg-white rounded-3xl shadow-2xl shadow-black/20 p-8 pt-10">
           {/* Cabeçalho */}
@@ -96,19 +89,12 @@ export default function App() {
               </div>
             </div>
 
-            <AnimatePresence mode="wait">
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="flex items-center gap-3 text-red-600 bg-red-50 p-4 rounded-xl border border-red-100"
-                >
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  <p className="text-xs font-bold uppercase tracking-tight">{error}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {error && (
+              <div className="flex items-center gap-3 text-red-600 bg-red-50 p-4 rounded-xl border border-red-100 transition-all duration-300">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <p className="text-xs font-bold uppercase tracking-tight">{error}</p>
+              </div>
+            )}
 
             <button
               type="submit"
@@ -133,8 +119,7 @@ export default function App() {
             Reserva - PR // Brasil • <span className="font-bold text-white">Criado por Prof. Lucas Mercer Leniar</span>
           </p>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
-
