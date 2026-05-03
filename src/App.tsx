@@ -26,7 +26,7 @@ export default function App() {
     setError('');
     
     if (!password) {
-      setError('POR FAVOR, DIGITE O CÓDIGO.');
+      setError('Por favor, digite o código.');
       return;
     }
 
@@ -37,25 +37,25 @@ export default function App() {
       if (password === 'ccm2024') {
         window.location.href = 'https://lucasmercer.github.io/horario';
       } else {
-        setError('CÓDIGO INCORRETO. TENTE NOVAMENTE.');
+        setError('Código incorreto. Tente novamente.');
       }
     }, 800);
   };
 
   return (
     <div className="min-h-screen bg-[#657c36] flex items-center justify-center p-4 font-sans selection:bg-slate-200">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-md">
         {/* Card de Login */}
-        <div className="bg-white rounded-3xl shadow-2xl shadow-black/20 p-8 pt-10">
+        <div className="bg-white rounded-3xl shadow-2xl shadow-black/20 p-8 pt-10 md:p-10 md:pt-12">
           {/* Cabeçalho */}
           <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-slate-100 rounded-full mb-5 ring-8 ring-slate-50">
               <GraduationCap className="w-8 h-8 text-slate-700" />
             </div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
               Horários CECM
             </h1>
-            <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-[0.2em] leading-tight max-w-[220px] mx-auto">
+            <p className="text-[11px] font-bold text-slate-400 mt-2 tracking-wide leading-tight whitespace-nowrap">
               Colégio Estadual Cívico-Militar Gregório Szeremeta
             </p>
           </div>
@@ -63,7 +63,7 @@ export default function App() {
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <div className="flex items-center justify-between mb-2.5">
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] px-1">
+                <label className="block text-[10px] font-bold text-slate-400 tracking-wide px-1">
                   Código de Acesso
                 </label>
               </div>
@@ -99,13 +99,13 @@ export default function App() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-black hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl shadow-xl shadow-black/10 flex items-center justify-center gap-3 transition-all active:scale-[0.97] text-xs uppercase tracking-[0.2em]"
+              className="w-full bg-black hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl shadow-xl shadow-black/10 flex items-center justify-center gap-3 transition-all active:scale-[0.97] text-sm tracking-wide"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  ACESSAR SISTEMA
+                  Acessar Sistema
                   <ChevronRight className="w-4 h-4" />
                 </>
               )}
