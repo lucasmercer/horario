@@ -1,6 +1,17 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let aiInstance: GoogleGenAI | null = null;
+
+function getAI() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Configuração da API do Gemini ausente. Por favor, configure a chave de API.");
+  }
+  if (!aiInstance) {
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+}
 
 export interface ExtractedData {
   teachers: { name: string; subject?: string }[];
@@ -47,6 +58,7 @@ REGRAS FINAIS:
 - Expanda abreviações (MAT -> MATEMATICA, PORT -> PORTUGUES, GEO -> GEOGRAFIA, HIST -> HISTORIA, CIEN -> CIENCIAS).`
 
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [

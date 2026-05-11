@@ -84,29 +84,34 @@ export default function ScheduleGenerator() {
 
   // Load data
   useEffect(() => {
-    const savedTeachers = localStorage.getItem('cecm_teachers');
-    const savedSubjects = localStorage.getItem('cecm_subjects');
-    const savedTurmas = localStorage.getItem('cecm_turmas');
-    const savedSchedules = localStorage.getItem('cecm_schedules');
+    try {
+      const savedTeachers = localStorage.getItem('cecm_teachers');
+      const savedSubjects = localStorage.getItem('cecm_subjects');
+      const savedTurmas = localStorage.getItem('cecm_turmas');
+      const savedSchedules = localStorage.getItem('cecm_schedules');
 
-    if (savedTeachers) setTeachers(JSON.parse(savedTeachers));
-    if (savedSubjects) setSubjects(JSON.parse(savedSubjects));
-    
-    if (savedTurmas) {
-      const parsedTurmas = JSON.parse(savedTurmas);
-      setTurmas(parsedTurmas);
-      if (parsedTurmas.length > 0) setSelectedTurmaId(parsedTurmas[0].id);
-    } else {
-      // Default classes if none exist
-      const defaultTurmas = Array.from({ length: 12 }, (_, i) => ({
-        id: crypto.randomUUID(),
-        name: `${Math.floor(i/3) + 6}º Ano ${String.fromCharCode(65 + (i % 3))}`
-      }));
-      setTurmas(defaultTurmas);
-      setSelectedTurmaId(defaultTurmas[0].id);
+      if (savedTeachers) setTeachers(JSON.parse(savedTeachers));
+      if (savedSubjects) setSubjects(JSON.parse(savedSubjects));
+      
+      if (savedTurmas) {
+        const parsedTurmas = JSON.parse(savedTurmas);
+        setTurmas(parsedTurmas);
+        if (parsedTurmas.length > 0) setSelectedTurmaId(parsedTurmas[0].id);
+      } else {
+        const defaultTurmas = Array.from({ length: 12 }, (_, i) => ({
+          id: crypto.randomUUID(),
+          name: `${Math.floor(i/3) + 6}º Ano ${String.fromCharCode(65 + (i % 3))}`
+        }));
+        setTurmas(defaultTurmas);
+        setSelectedTurmaId(defaultTurmas[0].id);
+      }
+      
+      if (savedSchedules) setSchedules(JSON.parse(savedSchedules));
+    } catch (err) {
+      console.error("Error loading data from localStorage:", err);
+      // Reset corrupted data
+      localStorage.clear();
     }
-
-    if (savedSchedules) setSchedules(JSON.parse(savedSchedules));
   }, []);
 
   // Conflict Detection
@@ -508,34 +513,46 @@ export default function ScheduleGenerator() {
           <div className="flex bg-slate-100 p-1 rounded-xl mr-2">
             <button 
               onClick={() => {
-                const updatedSchedules = { ...schedules };
-                if (selectedTurmaId) {
+                if (selectedTurmaId && confirm(`Limpar apenas o horário da turma ${currentTurma?.name}?`)) {
+                  const updatedSchedules = { ...schedules };
                   delete updatedSchedules[selectedTurmaId];
                   setSchedules(updatedSchedules);
-                } else {
-                  if (confirm('Limpar TODA a grade de horários?')) setSchedules({});
                 }
               }}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-amber-600 hover:bg-amber-50 transition-all"
-              title="Limpar Grade atual"
+              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-amber-600 hover:bg-amber-50 transition-all border border-transparent hover:border-amber-100"
+              title="Limpar Grade da turma atual"
             >
-              Limpar Grade
+              Limpar Turma
             </button>
             <button 
               onClick={() => {
-                if (confirm('Deseja realmente apagar TUDO (Professores, Matérias e Grade)?')) {
+                if (confirm('Limpar o horário de TODAS as turmas? (Professores e Matérias serão mantidos)')) {
+                  setSchedules({});
+                }
+              }}
+              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-orange-600 hover:bg-orange-50 transition-all border border-transparent hover:border-orange-100"
+              title="Limpar todos os horários"
+            >
+              Limpar Todos
+            </button>
+            <button 
+              onClick={() => {
+                if (confirm('Deseja realmente apagar TUDO (Professores, Matérias e Grade)? O sistema será reiniciado.')) {
                   setTeachers([]);
                   setSubjects([]);
                   setSchedules({});
                   setTurmas([]);
-                  localStorage.clear();
+                  localStorage.removeItem('cecm_teachers');
+                  localStorage.removeItem('cecm_subjects');
+                  localStorage.removeItem('cecm_turmas');
+                  localStorage.removeItem('cecm_schedules');
                   window.location.reload();
                 }
               }}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-red-600 hover:bg-red-50 transition-all"
-              title="Apagar tudo"
+              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-red-600 hover:bg-red-50 transition-all border border-transparent hover:border-red-100"
+              title="Apagar tudo permanentemente"
             >
-              Resetar
+              Resetar Tudo
             </button>
           </div>
 
