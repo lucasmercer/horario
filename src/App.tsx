@@ -10,15 +10,21 @@ import {
   GraduationCap, 
   AlertCircle
 } from 'lucide-react';
+import ScheduleGenerator from './components/ScheduleGenerator';
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    console.log("App mounted");
+    // Check if previously logged in
+    const auth = localStorage.getItem('isLoggedIn');
+    if (auth === 'true') {
+      setIsLoggedIn(true);
+    }
   }, []);
 
   const handleLogin = (e: FormEvent) => {
@@ -35,12 +41,48 @@ export default function App() {
     setTimeout(() => {
       setIsLoading(false);
       if (password === 'ccm2024') {
-        window.location.href = 'https://lucasmercer.github.io/horario';
+        localStorage.setItem('isLoggedIn', 'true');
+        setIsLoggedIn(true);
       } else {
         setError('Código incorreto. Tente novamente.');
       }
     }, 800);
   };
+
+  const handleLogout = () => {
+    localStorage.removeItem('isLoggedIn');
+    setIsLoggedIn(false);
+    setPassword('');
+  };
+
+  if (isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        {/* Header with Logout */}
+        <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 print:hidden">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#657c36] p-2 rounded-lg">
+              <GraduationCap className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-black text-slate-900 leading-tight">Gerador de Horários</h1>
+              <p className="text-[10px] text-slate-500 font-bold tracking-tight">CECM Gregório Szeremeta</p>
+            </div>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="text-xs font-black text-slate-400 hover:text-red-600 transition-colors uppercase tracking-[0.1em] px-3 py-2"
+          >
+            Sair do Sistema
+          </button>
+        </header>
+
+        <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+           <ScheduleGenerator />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#657c36] flex items-center justify-center p-4 font-sans selection:bg-slate-200">
