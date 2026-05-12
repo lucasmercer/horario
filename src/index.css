@@ -3,6 +3,8 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  /* Slate */
   --color-slate-50: #f8fafc;
   --color-slate-100: #f1f5f9;
   --color-slate-200: #e2e8f0;
@@ -13,13 +15,8 @@
   --color-slate-700: #334155;
   --color-slate-800: #1e293b;
   --color-slate-900: #0f172a;
-  --color-blue-600: #2563eb;
-  --color-blue-700: #1d4ed8;
-  --color-red-500: #ef4444;
-  --color-red-600: #dc2626;
-  --color-green-500: #22c55e;
-  --color-green-600: #16a34a;
-  --color-amber-600: #d97706;
+
+  /* Gray */
   --color-gray-50: #f9fafb;
   --color-gray-100: #f3f4f6;
   --color-gray-200: #e5e7eb;
@@ -30,50 +27,102 @@
   --color-gray-700: #374151;
   --color-gray-800: #1f2937;
   --color-gray-900: #111827;
+
+  /* Blue */
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+
+  /* Red */
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-200: #fecaca;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-900: #7f1d1d;
+
+  /* Green */
+  --color-green-100: #dcfce7;
+  --color-green-500: #22c55e;
+  --color-green-600: #16a34a;
+
+  /* Amber / Orange */
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-600: #d97706;
+  --color-orange-50: #fff7ed;
+  --color-orange-100: #ffedd5;
+  --color-orange-600: #ea580c;
+
+  /* Basic */
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-transparent: transparent;
 }
 
 @layer base {
   @media print {
     @page {
-      margin: 1cm;
-      size: landscape;
+      size: A4 landscape;
+      margin: 5mm;
     }
     
     body {
       background: white !important;
-      -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
     }
 
-    /* Hide everything by default in print if needed, 
-       but we use tailwind print:hidden mostly.
-       Just to be sure we clean up margins/shadows. */
-    * {
-      box-shadow: none !important;
-      text-shadow: none !important;
-    }
-
-    .no-print {
+    /* Hide everything except the schedule-grid */
+    header, .no-print, button, .flex-none, .z-50, .z-60, .bg-slate-900, .backdrop-blur-sm, nav, footer {
       display: none !important;
     }
 
-    .print-only {
+    .main-container, .grid, .flex {
+      padding: 0 !important;
+      margin: 0 !important;
+      max-width: none !important;
       display: block !important;
     }
 
-    /* Ensure table expands and doesn't scroll */
-    .overflow-x-auto {
-      overflow: visible !important;
+    .schedule-page {
+      page-break-after: always;
+      display: flex !important;
+      flex-direction: column;
+      justify-content: flex-start;
+      height: 100%;
+      min-height: 0;
+      margin-bottom: 0;
     }
 
     table {
-      page-break-inside: auto;
       width: 100% !important;
+      table-layout: fixed !important;
+      font-size: 7.5pt !important;
+      border-collapse: collapse !important;
+      margin: 0 !important;
     }
 
+    th, td {
+      padding: 2pt !important;
+      border: 1px solid #334155 !important;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    th {
+      background-color: #f1f5f9 !important;
+    }
+
+    .text-xs { font-size: 7pt !important; }
+    .text-sm { font-size: 8pt !important; }
+    .font-black { font-weight: 800 !important; }
+    
+    /* Force visibility of rows */
     tr {
       page-break-inside: avoid;
-      page-break-after: auto;
     }
   }
 }

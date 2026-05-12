@@ -33,6 +33,7 @@ interface Subject {
 interface Turma {
   id: string;
   name: string;
+  shift?: 'manha' | 'tarde' | 'noite';
 }
 
 interface ScheduleSlot {
@@ -82,6 +83,15 @@ export default function ScheduleGenerator() {
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
 
+  // Safe UUID generator
+  const generateId = () => {
+    try {
+      return crypto.randomUUID();
+    } catch (e) {
+      return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+    }
+  };
+
   // Load data
   useEffect(() => {
     try {
@@ -99,7 +109,7 @@ export default function ScheduleGenerator() {
         if (parsedTurmas.length > 0) setSelectedTurmaId(parsedTurmas[0].id);
       } else {
         const defaultTurmas = Array.from({ length: 12 }, (_, i) => ({
-          id: crypto.randomUUID(),
+          id: generateId(),
           name: `${Math.floor(i/3) + 6}º Ano ${String.fromCharCode(65 + (i % 3))}`
         }));
         setTurmas(defaultTurmas);
@@ -131,6 +141,18 @@ export default function ScheduleGenerator() {
   };
 
   // Save data
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // Auto-save to localStorage whenever data changes
+  useEffect(() => {
+    localStorage.setItem('cecm_teachers', JSON.stringify(teachers));
+    localStorage.setItem('cecm_subjects', JSON.stringify(subjects));
+    localStorage.setItem('cecm_turmas', JSON.stringify(turmas));
+    localStorage.setItem('cecm_schedules', JSON.stringify(schedules));
+  }, [teachers, subjects, turmas, schedules]);
+
   const handleSave = async () => {
     localStorage.setItem('cecm_teachers', JSON.stringify(teachers));
     localStorage.setItem('cecm_subjects', JSON.stringify(subjects));
@@ -138,22 +160,6 @@ export default function ScheduleGenerator() {
     localStorage.setItem('cecm_schedules', JSON.stringify(schedules));
     
     setIsSaved(true);
-
-    // Generate PDF as requested
-    const element = document.getElementById('schedule-grid');
-    if (element) {
-      // @ts-ignore
-      const html2pdf = (await import('html2pdf.js')).default;
-      const opt = {
-        margin: 0.2,
-        filename: `Horario_Escolar_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' as const }
-      };
-      html2pdf().set(opt).from(element).save();
-    }
-
     setTimeout(() => setIsSaved(false), 2000);
   };
 
@@ -168,7 +174,7 @@ export default function ScheduleGenerator() {
       setEditingTeacherId(null);
     } else {
       const newTeacher = { 
-        id: crypto.randomUUID(), 
+        id: generateId(), 
         name: newTeacherName,
         subjectId: newTeacherSubjectId || undefined
       };
@@ -196,7 +202,7 @@ export default function ScheduleGenerator() {
       setEditingSubjectId(null);
     } else {
       const newSubject = { 
-        id: crypto.randomUUID(), 
+        id: generateId(), 
         name: newSubjectName, 
         workload: newSubjectWorkload || 1 
       };
@@ -291,81 +297,92 @@ export default function ScheduleGenerator() {
           if (!base64Data) return;
 
           const data = await extractScheduleFromImage(base64Data, fileType);
-          
-          const normalize = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+          console.log("Raw Extracted Data:", data);
+          if (!data || !Array.isArray(data.turmas)) {
+            throw new Error("Formato de dados inválido recebido da IA.");
+          }
+
+          const normalize = (str: string) => str ? str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() : "";
 
           // Merge subjects first (needed for teacher links)
           const updatedSubjects = [...subjects];
-          data.subjects.forEach(newSubject => {
-            const normalizedNew = normalize(newSubject.name);
-            if (!updatedSubjects.find(s => normalize(s.name) === normalizedNew || normalizedNew.includes(normalize(s.name)))) {
-              updatedSubjects.push({ 
-                id: crypto.randomUUID(), 
-                name: newSubject.name, 
-                workload: newSubject.workload 
-              });
-            }
-          });
-          setSubjects(updatedSubjects);
+          if (Array.isArray(data.subjects)) {
+            data.subjects.forEach(newSubject => {
+              if (!newSubject.name) return;
+              const normalizedNew = normalize(newSubject.name);
+              if (!updatedSubjects.find(s => normalize(s.name) === normalizedNew || (normalizedNew.length > 3 && normalizedNew.includes(normalize(s.name))) || (normalize(s.name).length > 3 && normalize(s.name).includes(normalizedNew)))) {
+                updatedSubjects.push({ 
+                  id: generateId(), 
+                  name: newSubject.name, 
+                  workload: newSubject.workload || 2
+                });
+              }
+            });
+          }
 
           // Merge teachers and link subjects
           const updatedTeachers = [...teachers];
-          data.teachers.forEach(newTeacher => {
-            const normalizedNewName = normalize(newTeacher.name);
-            const existingTeacher = updatedTeachers.find(t => normalize(t.name) === normalizedNewName || normalizedNewName.includes(normalize(t.name)));
-            
-            const linkedSubject = newTeacher.subject 
-              ? updatedSubjects.find(s => normalize(newTeacher.subject!).includes(normalize(s.name)) || normalize(s.name).includes(normalize(newTeacher.subject!)))
-              : null;
+          if (Array.isArray(data.teachers)) {
+            data.teachers.forEach(newTeacher => {
+              if (!newTeacher.name) return;
+              const normalizedNewName = normalize(newTeacher.name);
+              const existingTeacher = updatedTeachers.find(t => normalize(t.name) === normalizedNewName || (normalizedNewName.length > 5 && normalizedNewName.includes(normalize(t.name))));
+              
+              const linkedSubject = newTeacher.subject 
+                ? updatedSubjects.find(s => normalize(newTeacher.subject!).includes(normalize(s.name)) || normalize(s.name).includes(normalize(newTeacher.subject!)))
+                : null;
 
-            if (!existingTeacher) {
-              updatedTeachers.push({ 
-                id: crypto.randomUUID(), 
-                name: newTeacher.name,
-                subjectId: linkedSubject?.id 
-              });
-            } else if (!existingTeacher.subjectId && linkedSubject) {
-              existingTeacher.subjectId = linkedSubject.id;
-            }
-          });
-          setTeachers(updatedTeachers);
+              if (!existingTeacher) {
+                updatedTeachers.push({ 
+                  id: generateId(), 
+                  name: newTeacher.name,
+                  subjectId: linkedSubject?.id 
+                });
+              } else if (!existingTeacher.subjectId && linkedSubject) {
+                existingTeacher.subjectId = linkedSubject.id;
+              }
+            });
+          }
 
           // Merge turmas and schedules
           const updatedTurmas = [...turmas];
           const updatedSchedules = { ...schedules };
 
           data.turmas.forEach(newTurma => {
+            if (!newTurma || !newTurma.name || !newTurma.schedule) return;
             const normalizedTurmaName = normalize(newTurma.name);
             
-            // FILTRAGEM DE LIXO DEFINITIVA: 
+            // FILTRAGEM DE LIXO
             const lettersCount = (newTurma.name.match(/[A-Za-z]/g) || []).length;
             const numbersCount = (newTurma.name.match(/\d/g) || []).length;
             
             const isGarbage = (numbersCount > lettersCount && numbersCount > 2) || (newTurma.name.length > 20 && lettersCount < 4);
-            const isSequenceOfNumbers = newTurma.name.split(/\s+/).length > 10;
             const isGenericHeader = normalizedTurmaName.includes('carga horaria') || 
                                    normalizedTurmaName.includes('total') || 
                                    normalizedTurmaName.includes('professor') || 
                                    normalizedTurmaName.includes('horario') ||
-                                   normalizedTurmaName.includes('cronograma') ||
                                    normalizedTurmaName.includes('obs');
 
-            if (newTurma.name.length > 30 || isGarbage || isSequenceOfNumbers || isGenericHeader || !newTurma.name.trim()) {
-              console.warn("Filtrando turma possivelmente inválida:", newTurma.name);
+            if (newTurma.name.length > 30 || isGarbage || isGenericHeader || !newTurma.name.trim()) {
               return;
             }
 
             let turma = updatedTurmas.find(t => normalize(t.name) === normalizedTurmaName || normalizedTurmaName.includes(normalize(t.name)) || normalize(t.name).includes(normalizedTurmaName));
             
             if (!turma) {
-              turma = { id: crypto.randomUUID(), name: newTurma.name };
+              turma = { id: generateId(), name: newTurma.name, shift: importShift as any };
               updatedTurmas.push(turma);
+            } else if (!turma.shift) {
+              turma.shift = importShift as any;
             }
 
             const scheduleForTurma: Schedule = {};
             Object.entries(newTurma.schedule).forEach(([extractedSlotId, slotData]: [string, any]) => {
+              if (!extractedSlotId || !extractedSlotId.includes('-')) return;
+              
               const [dayId, periodStr] = extractedSlotId.split('-');
               const periodNum = parseInt(periodStr);
+              if (isNaN(periodNum)) return;
               
               const actualPeriod = importShift === 'tarde' ? periodNum + 6 : periodNum;
               const slotId = `${dayId}-${actualPeriod}`;
@@ -378,77 +395,44 @@ export default function ScheduleGenerator() {
               // Match Teacher
               let teacher = updatedTeachers.find(t => 
                 normalize(t.name) === normExtractedTeacher || 
-                (normExtractedTeacher.length > 2 && (normExtractedTeacher.includes(normalize(t.name)) || normalize(t.name).includes(normExtractedTeacher)))
+                (normExtractedTeacher.length > 3 && normExtractedTeacher.includes(normalize(t.name)))
               );
-              
+               
               // Match Subject
               let subject = updatedSubjects.find(s => 
                 normalize(s.name) === normExtractedSubject || 
-                (normExtractedSubject.length > 2 && (normExtractedSubject.includes(normalize(s.name)) || normalize(s.name).includes(normExtractedSubject)))
+                (normExtractedSubject.length > 3 && normExtractedSubject.includes(normalize(s.name)))
               );
 
-              // If only one matched, try to find the other through the teacher's default subject or subject's first teacher
               if (teacher && !subject) {
-                subject = updatedSubjects.find(s => s.id === teacher.subjectId);
+                subject = updatedSubjects.find(s => s.id === teacher!.subjectId);
               }
               if (subject && !teacher) {
-                teacher = updatedTeachers.find(t => t.subjectId === subject.id);
-              }
-
-              // Final check: if we still missing one, use very loose partial matching for the teacher name in the subject field and vice-versa
-              if (!teacher && normExtractedTeacher.length > 2) {
-                teacher = updatedTeachers.find(t => normalize(t.name).split(/\s+/).some(part => part.length > 3 && normExtractedTeacher.includes(part)));
+                teacher = updatedTeachers.find(t => t.subjectId === subject!.id);
               }
               
               if (teacher && subject) {
                 scheduleForTurma[slotId] = { teacherId: teacher.id, subjectId: subject.id };
-              } else if (normExtractedTeacher || normExtractedSubject) {
-                // Better recovery: if we found at least a hint, try one more time with very loose matches
-                const looseTeacher = teacher || updatedTeachers.find(t => 
-                  normalize(t.name).length > 3 && (normExtractedTeacher.includes(normalize(t.name)) || normalize(t.name).includes(normExtractedTeacher))
-                );
-                const looseSubject = subject || updatedSubjects.find(s => 
-                  normalize(s.name).length > 3 && (normExtractedSubject.includes(normalize(s.name)) || normalize(s.name).includes(normExtractedSubject))
-                );
-
-                if (looseTeacher && looseSubject) {
-                  scheduleForTurma[slotId] = { teacherId: looseTeacher.id, subjectId: looseSubject.id };
-                }
               }
             });
             
-            updatedSchedules[turma.id] = { ...(updatedSchedules[turma.id] || {}), ...scheduleForTurma };
+            if (Object.keys(scheduleForTurma).length > 0) {
+              updatedSchedules[turma.id] = { ...(updatedSchedules[turma.id] || {}), ...scheduleForTurma };
+            }
           });
 
-          // Auto-calculate workload based on maximum usage found in any class
-          const finalSubjects = updatedSubjects.map(subj => {
-            let maxUsage = 0;
-            Object.values(updatedSchedules).forEach((sched: Schedule) => {
-              const usage = Object.values(sched).filter((slot: ScheduleSlot) => slot.subjectId === subj.id).length;
-              if (usage > maxUsage) maxUsage = usage;
-            });
-            return { ...subj, workload: maxUsage || subj.workload };
-          });
-
-          setSubjects(finalSubjects);
+          setSubjects(updatedSubjects);
+          setTeachers(updatedTeachers);
           setTurmas(updatedTurmas);
           setSchedules(updatedSchedules);
+
+          const totalAulas = Object.values(updatedSchedules).reduce((acc: number, curr: any) => acc + Object.keys(curr).length, 0);
           
-          if (updatedTurmas.length > 0) {
-            setSelectedTurmaId(updatedTurmas[0].id);
-          }
-          
-          let actuallySavedSlots = 0;
-          Object.values(updatedSchedules).forEach((sched: any) => {
-            actuallySavedSlots += Object.keys(sched).length;
-          });
-          
-          alert(`Importação concluída!\nTurmas processadas: ${data.turmas.length}\nNovos Professores: ${data.teachers.length}\nNovas Disciplinas: ${data.subjects.length}\nAulas mapeadas com sucesso: ${actuallySavedSlots}`);
-          
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          alert(`Importação concluída!\nTurmas: ${data.turmas.length}\nAulas mapeadas: ${totalAulas}`);
+          window.location.reload(); // Reload to ensure everything is fresh from localStorage (which gets updated by useEffect)
         } catch (err) {
-          console.error("Error processing Gemini response:", err);
-          alert("Erro ao processar os dados do horário. Tente novamente.");
+          console.error("Detailed processing error:", err);
+          alert(`Erro ao processar arquivo: ${err instanceof Error ? err.message : "Erro desconhecido"}`);
         } finally {
           setIsImporting(false);
         }
@@ -583,7 +567,116 @@ export default function ScheduleGenerator() {
             className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
           >
             <Printer className="w-4 h-4" />
-            Imprimir
+            Imprimir Turma
+          </button>
+          
+          <button 
+            onClick={() => {
+              const manhaTurmas = turmas.filter(t => t.shift === 'manha' || (t.name.toLowerCase().includes('6') || t.name.toLowerCase().includes('7') || t.name.toLowerCase().includes('8') || t.name.toLowerCase().includes('9')) && !t.shift).sort((a, b) => a.name.localeCompare(b.name));
+              const tardeTurmas = turmas.filter(t => t.shift === 'tarde').sort((a, b) => a.name.localeCompare(b.name));
+              
+              const generateTurmaHtml = (turma: Turma, shift: 'manha' | 'tarde') => {
+                const currentPeriods = shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
+                const schedule = schedules[turma.id] || {};
+                const dayAbbreviations: Record<string, string> = {
+                  'seg': 'SEG',
+                  'ter': 'TER',
+                  'qua': 'QUA',
+                  'qui': 'QUI',
+                  'sex': 'SEX'
+                };
+
+                return `
+                  <div class="schedule-page">
+                    <h2 style="font-size: 12pt; margin: 4pt 0; font-weight: 800; text-align: center; text-transform: uppercase; color: #0f172a;">
+                      Horário Escolar - ${turma.name} (${shift === 'manha' ? 'MANHÃ' : 'TARDE'})
+                    </h2>
+                    <table style="width: 100%; border-collapse: collapse; border: 1.5pt solid black; table-layout: fixed;">
+                      <thead>
+                        <tr style="background-color: #f1f5f9;">
+                          <th style="border: 1pt solid black; padding: 4pt; font-size: 8pt; width: 12%; text-transform: uppercase;">Horário</th>
+                          ${DAYS.map(day => `
+                            <th style="border: 1pt solid black; padding: 4pt; font-size: 8pt; width: 17.6%; text-transform: uppercase;">
+                              ${dayAbbreviations[day.id] || day.label}
+                            </th>
+                          `).join('')}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${currentPeriods.map(pId => {
+                          const pName = `${getDisplayPeriod(pId)}º Horário`;
+                          return `
+                            <tr>
+                              <td style="border: 1pt solid black; padding: 3pt; font-weight: 700; background-color: #f8fafc; text-align: center;">
+                                <div style="font-size: 8pt; white-space: nowrap;">${pName}</div>
+                              </td>
+                              ${DAYS.map(day => {
+                                const slot = schedule[`${day.id}-${pId}`];
+                                const teacher = teachers.find(t => t.id === slot?.teacherId);
+                                const subject = subjects.find(s => s.id === slot?.subjectId);
+                                return `
+                                  <td style="border: 1pt solid black; padding: 3pt; text-align: center; height: 38pt; overflow: hidden;">
+                                    ${subject ? `<div style="font-weight: 800; font-size: 8.5pt; color: #1e293b; line-height: 1.1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${subject.name}</div>` : ''}
+                                    ${teacher ? `<div style="font-size: 7.5pt; color: #64748b; margin-top: 1pt; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">${teacher.name}</div>` : ''}
+                                  </td>
+                                `;
+                              }).join('')}
+                            </tr>
+                          `;
+                        }).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                `;
+              };
+
+              let html = '';
+              if (manhaTurmas.length > 0) {
+                html += '<h1 style="text-align: center; font-size: 20pt; margin: 2cm 0 1cm 0; font-weight: 800;">QUADRO DE HORÁRIOS - MANHÃ</h1>';
+                manhaTurmas.forEach(t => html += generateTurmaHtml(t, 'manha'));
+              }
+              if (tardeTurmas.length > 0) {
+                html += '<h1 style="text-align: center; font-size: 20pt; margin: 2cm 0 1cm 0; font-weight: 800;">QUADRO DE HORÁRIOS - TARDE</h1>';
+                tardeTurmas.forEach(t => html += generateTurmaHtml(t, 'tarde'));
+              }
+
+              const printWindow = window.open('', '_blank');
+              if (printWindow) {
+                printWindow.document.write(`
+                  <html>
+                    <head>
+                      <title>Impressão Geral - CECM</title>
+                      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+                      <style>
+                        @page { size: A4 landscape; margin: 0.5cm; }
+                        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        .schedule-page { page-break-after: always; padding: 0.5cm; box-sizing: border-box; height: 100vh; display: flex; flex-direction: column; justify-content: flex-start; }
+                        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                        th, td { border: 1pt solid black; text-align: center; vertical-align: middle; }
+                        h1 { page-break-before: always; color: #1e293b; text-transform: uppercase; }
+                        h1:first-child { page-break-before: avoid; }
+                      </style>
+                    </head>
+                    <body>
+                      ${html}
+                      <script>
+                        window.onload = () => { 
+                          setTimeout(() => { 
+                            window.print(); 
+                            // window.close(); 
+                          }, 1000); 
+                        }
+                      </script>
+                    </body>
+                  </html>
+                `);
+                printWindow.document.close();
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg"
+          >
+            <Printer className="w-4 h-4" />
+            Imprimir Tudo
           </button>
         </div>
       </div>
