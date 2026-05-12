@@ -83,6 +83,11 @@ export default function ScheduleGenerator() {
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
 
+  // Filter turmas for the interactive grid - let's show all by default unless we really need filtering
+  // The user complained about missing "middle" classes, so showing all might be safer
+  // or at least ensure the ones without shift show up correctly.
+  const displayedTurmas = turmas.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
   // Safe UUID generator
   const generateId = () => {
     try {
@@ -572,89 +577,206 @@ export default function ScheduleGenerator() {
           
           <button 
             onClick={() => {
-              const manhaTurmas = turmas.filter(t => t.shift === 'manha' || (t.name.toLowerCase().includes('6') || t.name.toLowerCase().includes('7') || t.name.toLowerCase().includes('8') || t.name.toLowerCase().includes('9')) && !t.shift).sort((a, b) => a.name.localeCompare(b.name));
-              const tardeTurmas = turmas.filter(t => t.shift === 'tarde').sort((a, b) => a.name.localeCompare(b.name));
+              // Less aggressive filtering for printing
+              const manhaTurmas = turmas.filter(t => t.shift === 'manha' || (!t.shift && !t.name.toLowerCase().includes('tarde'))).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+              const tardeTurmas = turmas.filter(t => t.shift === 'tarde' || (!t.shift && t.name.toLowerCase().includes('tarde'))).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
               
-              const generateTurmaHtml = (turma: Turma, shift: 'manha' | 'tarde') => {
+              const generateScheduleTable = (shiftTurmas: Turma[], shift: 'manha' | 'tarde') => {
+                if (shiftTurmas.length === 0) return '';
+                
                 const currentPeriods = shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
-                const schedule = schedules[turma.id] || {};
-                const dayAbbreviations: Record<string, string> = {
-                  'seg': 'SEG',
-                  'ter': 'TER',
-                  'qua': 'QUA',
-                  'qui': 'QUI',
-                  'sex': 'SEX'
-                };
+                const timeRangesManha = ["7h30 às 8h20", "8h20 às 9h10", "9h10 às 10h", "10h20 às 11h10", "11h10 às 12h", "12h às 12h50"];
+                const timeRangesTarde = ["13h às 13h50", "13h50 às 14h40", "14h40 às 15h30", "15h50 às 16h40", "16h40 às 17h30", "17h30 às 18h20"];
+                const currentTimeRanges = shift === 'manha' ? timeRangesManha : timeRangesTarde;
 
                 return `
-                  <div class="schedule-page">
-                    <h2 style="font-size: 12pt; margin: 4pt 0; font-weight: 800; text-align: center; text-transform: uppercase; color: #0f172a;">
-                      Horário Escolar - ${turma.name} (${shift === 'manha' ? 'MANHÃ' : 'TARDE'})
-                    </h2>
-                    <table style="width: 100%; border-collapse: collapse; border: 1.5pt solid black; table-layout: fixed;">
-                      <thead>
-                        <tr style="background-color: #f1f5f9;">
-                          <th style="border: 1pt solid black; padding: 4pt; font-size: 8pt; width: 12%; text-transform: uppercase;">Horário</th>
-                          ${DAYS.map(day => `
-                            <th style="border: 1pt solid black; padding: 4pt; font-size: 8pt; width: 17.6%; text-transform: uppercase;">
-                              ${dayAbbreviations[day.id] || day.label}
-                            </th>
-                          `).join('')}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        ${currentPeriods.map(pId => {
-                          const pName = `${getDisplayPeriod(pId)}º Horário`;
-                          return `
-                            <tr>
-                              <td style="border: 1pt solid black; padding: 3pt; font-weight: 700; background-color: #f8fafc; text-align: center;">
-                                <div style="font-size: 8pt; white-space: nowrap;">${pName}</div>
-                              </td>
-                              ${DAYS.map(day => {
-                                const slot = schedule[`${day.id}-${pId}`];
-                                const teacher = teachers.find(t => t.id === slot?.teacherId);
-                                const subject = subjects.find(s => s.id === slot?.subjectId);
-                                return `
-                                  <td style="border: 1pt solid black; padding: 3pt; text-align: center; height: 38pt; overflow: hidden;">
-                                    ${subject ? `<div style="font-weight: 800; font-size: 8.5pt; color: #1e293b; line-height: 1.1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${subject.name}</div>` : ''}
-                                    ${teacher ? `<div style="font-size: 7.5pt; color: #64748b; margin-top: 1pt; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">${teacher.name}</div>` : ''}
+                  <div class="print-container">
+                    <div class="print-header">
+                      <h1>COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
+                      <h2>HORÁRIO DA ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
+                    </div>
+                    
+                    <div class="table-wrapper">
+                      <table class="grid-table">
+                        <thead>
+                          <tr>
+                            <th class="corner-header"></th>
+                            ${shiftTurmas.map(t => `<th class="turma-header">${t.name}</th>`).join('')}
+                            <th class="time-header">CRONOGRAMA HORÁRIO</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${DAYS.map((day) => {
+                            return currentPeriods.map((pId, pIndex) => {
+                              const pName = `${pIndex + 1}ª aula`;
+                              const time = currentTimeRanges[pIndex];
+                              
+                              return `
+                                <tr>
+                                  ${pIndex === 0 ? `<td rowspan="6" class="day-cell"><span>${day.label}</span></td>` : ''}
+                                  ${shiftTurmas.map(turma => {
+                                    const slot = schedules[turma.id]?.[`${day.id}-${pId}`];
+                                    const teacher = teachers.find(t => t.id === slot?.teacherId);
+                                    const subject = subjects.find(s => s.id === slot?.subjectId);
+                                    return `
+                                      <td class="slot-cell">
+                                        ${subject ? `<div class="subj-name">${subject.name}</div>` : ''}
+                                        ${teacher ? `<div class="prof-name">${teacher.name}</div>` : ''}
+                                      </td>
+                                    `;
+                                  }).join('')}
+                                  <td class="time-info">
+                                    <span class="p-num">${pName}</span>
+                                    <span class="p-time">${time}</span>
                                   </td>
-                                `;
-                              }).join('')}
-                            </tr>
-                          `;
-                        }).join('')}
-                      </tbody>
-                    </table>
+                                </tr>
+                              `;
+                            }).join('');
+                          }).join('')}
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    <div class="print-footer">
+                      ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
                   </div>
                 `;
               };
 
               let html = '';
-              if (manhaTurmas.length > 0) {
-                html += '<h1 style="text-align: center; font-size: 20pt; margin: 2cm 0 1cm 0; font-weight: 800;">QUADRO DE HORÁRIOS - MANHÃ</h1>';
-                manhaTurmas.forEach(t => html += generateTurmaHtml(t, 'manha'));
-              }
-              if (tardeTurmas.length > 0) {
-                html += '<h1 style="text-align: center; font-size: 20pt; margin: 2cm 0 1cm 0; font-weight: 800;">QUADRO DE HORÁRIOS - TARDE</h1>';
-                tardeTurmas.forEach(t => html += generateTurmaHtml(t, 'tarde'));
-              }
+              if (manhaTurmas.length > 0) html += generateScheduleTable(manhaTurmas, 'manha');
+              if (tardeTurmas.length > 0) html += generateScheduleTable(tardeTurmas, 'tarde');
 
               const printWindow = window.open('', '_blank');
               if (printWindow) {
                 printWindow.document.write(`
                   <html>
                     <head>
-                      <title>Impressão Geral - CECM</title>
+                      <title>Quadro de Horários - CECM</title>
                       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
                       <style>
-                        @page { size: A4 landscape; margin: 0.5cm; }
-                        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                        .schedule-page { page-break-after: always; padding: 0.5cm; box-sizing: border-box; height: 100vh; display: flex; flex-direction: column; justify-content: flex-start; }
-                        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-                        th, td { border: 1pt solid black; text-align: center; vertical-align: middle; }
-                        h1 { page-break-before: always; color: #1e293b; text-transform: uppercase; }
-                        h1:first-child { page-break-before: avoid; }
+                        @page { 
+                          size: A4 landscape; 
+                          margin: 0.3cm; 
+                        }
+                        * { box-sizing: border-box; }
+                        body { 
+                          font-family: 'Inter', sans-serif; 
+                          margin: 0; 
+                          padding: 0; 
+                          background: white; 
+                          color: black;
+                          -webkit-print-color-adjust: exact; 
+                          print-color-adjust: exact; 
+                        }
+                        
+                        .print-container { 
+                          page-break-after: always; 
+                          width: 100%;
+                          height: 190mm;
+                          display: flex;
+                          flex-direction: column;
+                          overflow: hidden;
+                        }
+                        
+                        .print-header { text-align: center; margin-bottom: 3px; }
+                        .print-header h1 { font-size: 13pt; margin: 0; font-weight: 800; }
+                        .print-header h2 { font-size: 11pt; margin: 1px 0; font-weight: 700; color: #1e293b; }
+                        
+                        .table-wrapper {
+                          flex: 1;
+                          width: 100%;
+                          overflow: hidden;
+                          border: 1.5pt solid black;
+                        }
+                        
+                        .grid-table { 
+                          width: 100%; 
+                          height: 100%;
+                          border-collapse: collapse; 
+                          table-layout: fixed; 
+                        }
+                        
+                        th, td { 
+                          border: 0.5pt solid black; 
+                          text-align: center; 
+                          vertical-align: middle;
+                          padding: 1px;
+                        }
+                        
+                        .corner-header { width: 30px; }
+                        .time-header { width: 140px; font-size: 8pt; font-weight: 800; background-color: #f1f5f9; }
+                        
+                        .turma-header { 
+                          background-color: #d1d5db; 
+                          font-size: 8pt; 
+                          font-weight: 800; 
+                          padding: 4px 0;
+                        }
+                        
+                        .day-cell { 
+                          background-color: #f1f5f9; 
+                          width: 30px;
+                          padding: 0;
+                        }
+                        .day-cell span {
+                          display: block;
+                          writing-mode: vertical-lr;
+                          transform: rotate(180deg);
+                          font-size: 8pt; 
+                          font-weight: 900; 
+                          text-transform: uppercase;
+                          white-space: nowrap;
+                          margin: 0 auto;
+                        }
+                        
+                        .slot-cell { 
+                          height: 32pt;
+                          overflow: hidden;
+                          min-width: 60pt;
+                        }
+                        
+                        .subj-name { 
+                          font-size: 7.5pt; 
+                          font-weight: 800; 
+                          color: black; 
+                          text-transform: uppercase;
+                          line-height: 1.1;
+                          display: -webkit-box;
+                          -webkit-line-clamp: 2;
+                          -webkit-box-orient: vertical;
+                          overflow: hidden;
+                        }
+                        
+                        .prof-name { 
+                          font-size: 6pt; 
+                          color: #475569; 
+                          margin-top: 1px;
+                          line-height: 1;
+                          overflow: hidden;
+                          text-overflow: ellipsis;
+                          white-space: nowrap;
+                        }
+                        
+                        .time-info { 
+                          background-color: #f8fafc;
+                          padding: 1px;
+                          line-height: 1.1;
+                        }
+                        .p-num { display: block; font-size: 7.5pt; font-weight: 700; color: #2563eb; }
+                        .p-time { display: block; font-size: 6.5pt; font-weight: 400; color: #64748b; }
+                        
+                        .print-footer {
+                          margin-top: 2px;
+                          text-align: right;
+                          font-size: 6pt;
+                          color: #94a3b8;
+                        }
+                        
+                        tbody tr:nth-of-type(6n) {
+                          border-bottom: 1.5pt solid black;
+                        }
                       </style>
                     </head>
                     <body>
@@ -663,7 +785,6 @@ export default function ScheduleGenerator() {
                         window.onload = () => { 
                           setTimeout(() => { 
                             window.print(); 
-                            // window.close(); 
                           }, 1000); 
                         }
                       </script>
@@ -676,7 +797,7 @@ export default function ScheduleGenerator() {
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg"
           >
             <Printer className="w-4 h-4" />
-            Imprimir Tudo
+            Imprimir Quadro Geral
           </button>
         </div>
       </div>
@@ -704,13 +825,13 @@ export default function ScheduleGenerator() {
               </div>
             </div>
             
-            <div className="overflow-auto max-h-[70vh] custom-scrollbar">
-              <table className="w-full border-collapse border-spacing-0">
+            <div className="overflow-auto max-h-[75vh] custom-scrollbar">
+              <table className="w-full border-collapse border-spacing-0 min-w-max">
                 <thead>
                   <tr className="bg-slate-100 border-b-2 border-slate-900 sticky top-0 z-20">
-                    <th className="p-2 bg-slate-100 sticky left-0 z-40 border-r-2 border-slate-900 min-w-[50px]"></th>
-                    {turmas.map(t => (
-                      <th key={t.id} className="p-0 border-r border-slate-300 text-xs font-black uppercase tracking-widest text-slate-900 min-w-[130px] max-w-[200px] truncate bg-slate-100">
+                    <th className="bg-slate-100 sticky left-0 z-40 border-r-2 border-slate-900 w-10 min-w-[40px] max-w-[40px]"></th>
+                    {displayedTurmas.map(t => (
+                      <th key={t.id} className="p-0 border-r border-slate-300 text-xs font-black uppercase tracking-widest text-slate-900 min-w-[120px] bg-slate-100">
                         <div className="flex items-center justify-between px-3 py-3 group">
                           <span className="truncate">{t.name}</span>
                           <button 
@@ -725,31 +846,34 @@ export default function ScheduleGenerator() {
                         </div>
                       </th>
                     ))}
-                    <th className="p-3 bg-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-900 sticky right-0 z-20 shadow-[-4px_0_10px_rgba(0,0,0,0.05)] w-40">
-                      Cronograma Horário
+                    <th className="p-3 bg-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-900 sticky right-0 z-20 shadow-[-4px_0_10px_rgba(0,0,0,0.05)] w-28">
+                      Horário
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {DAYS.map((day, dayIndex) => (
+                  {DAYS.map((day) => (
                     <React.Fragment key={day.id}>
-                      {/* Day Label Cell - Merged across rows */}
                       {PERIODS_MANHA.map((period, pIndex) => {
                         const actualPeriod = importShift === 'manha' ? period : period + 6;
                         const timeRange = importShift === 'manha' 
-                          ? ["7h30 às 8h20", "8h20 às 9h10", "9h10 às 10h", "10h20 às 11h10", "11h10 às 12h", "12h às 12h50"][pIndex]
-                          : ["13h às 13h50", "13h50 às 14h40", "14h40 às 15h30", "15h50 às 16h40", "16h40 às 17h30", "17h30 às 18h20"][pIndex];
+                          ? ["7h30-8h20", "8h20-9h10", "9h10-10h", "10h20-11h10", "11h10-12h", "12h-12h50"][pIndex]
+                          : ["13h-13h50", "13h50-14h40", "14h40-15h30", "15h50-16h40", "16h40-17h30", "17h30-18h20"][pIndex];
 
                         return (
-                          <tr key={`${day.id}-${actualPeriod}`} className={`border-b border-slate-300 hover:bg-slate-50 transition-colors ${pIndex === 5 ? 'border-b-4 border-slate-900' : ''}`}>
+                          <tr key={`${day.id}-${actualPeriod}`} className={`border-b border-slate-200 hover:bg-slate-50 transition-colors h-14 ${pIndex === 5 ? 'border-b-[3px] border-slate-900' : ''}`}>
                             {/* Day Column (Sticky Left) */}
                             {pIndex === 0 && (
-                              <td rowSpan={6} className="p-2 bg-slate-900 text-white text-[10px] font-black uppercase [writing-mode:vertical-lr] rotate-180 text-center tracking-[0.3em] border-r-2 border-slate-900 sticky left-0 z-40 shadow-[2px_0_10px_rgba(0,0,0,0.1)]">
-                                {day.label}
+                              <td rowSpan={6} className="bg-slate-900 text-white p-0 w-10 min-w-[40px] max-w-[40px] border-r-2 border-slate-900 sticky left-0 z-40 shadow-[2px_0_10px_rgba(0,0,0,0.1)]">
+                                <div className="flex items-center justify-center h-full w-full">
+                                  <span className="text-[10px] font-black uppercase [writing-mode:vertical-lr] rotate-180 text-center tracking-widest whitespace-nowrap">
+                                    {day.label}
+                                  </span>
+                                </div>
                               </td>
                             )}
                             
-                            {turmas.map(turma => {
+                            {displayedTurmas.map(turma => {
                               const slotId = `${day.id}-${actualPeriod}`;
                               const slot = schedules[turma.id]?.[slotId];
                               const teacher = teachers.find(t => t.id === slot?.teacherId);
@@ -760,36 +884,36 @@ export default function ScheduleGenerator() {
                                 <td 
                                   key={turma.id}
                                   onClick={() => handleSlotClick(day.id, actualPeriod, turma.id)}
-                                  className={`p-2 border-r border-slate-200 cursor-pointer transition-all group relative ${conflicts.length > 0 ? 'bg-red-50' : ''}`}
+                                  className={`p-1.5 border-r border-slate-200 cursor-pointer transition-all group relative ${conflicts.length > 0 ? 'bg-red-50' : ''}`}
                                 >
                                   {slot ? (
-                                    <div className="flex flex-col items-center text-center">
-                                      <span className={`text-[10px] font-black uppercase leading-tight ${conflicts.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                                    <div className="flex flex-col items-center justify-center text-center overflow-hidden">
+                                      <span className={`text-[10px] font-black uppercase leading-[1.1] mb-0.5 ${conflicts.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>
                                         {subject?.name}
                                       </span>
-                                      <span className="text-[8px] font-bold text-slate-400 uppercase mt-0.5 truncate w-full">
+                                      <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full">
                                         {teacher?.name}
                                       </span>
                                       {conflicts.length > 0 && (
-                                        <div className="absolute top-1 right-1">
+                                        <div className="absolute top-0.5 right-0.5">
                                           <AlertCircle className="w-2.5 h-2.5 text-red-500 fill-white" />
                                         </div>
                                       )}
                                     </div>
                                   ) : (
-                                    <div className="h-6 flex items-center justify-center opacity-20 group-hover:opacity-100 transition-opacity">
-                                      <Plus className="w-3 h-3 text-slate-400" />
+                                    <div className="h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Plus className="w-3.5 h-3.5 text-slate-400" />
                                     </div>
                                   )}
                                 </td>
                               );
                             })}
-                            <td className="p-2 border-l border-slate-900 bg-slate-50 sticky right-0 z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.05)]">
-                              <div className="flex items-center justify-between gap-4">
-                                <span className={`text-[10px] font-black uppercase shrink-0 ${importShift === 'manha' ? 'text-blue-600' : 'text-red-500'}`}>
+                            <td className="p-1.5 border-l border-slate-400 bg-slate-50 sticky right-0 z-10 shadow-[-2px_0_5px_rgba(0,0,0,0.05)] w-28">
+                              <div className="flex flex-col items-center justify-center gap-0.5">
+                                <span className={`text-[9px] font-black uppercase shrink-0 ${importShift === 'manha' ? 'text-blue-600' : 'text-red-500'}`}>
                                   {pIndex + 1}ª aula
                                 </span>
-                                <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
+                                <span className="text-[8px] font-bold text-slate-400 whitespace-nowrap">
                                   {timeRange}
                                 </span>
                               </div>
