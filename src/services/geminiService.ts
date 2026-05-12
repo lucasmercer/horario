@@ -60,7 +60,7 @@ REGRAS FINAIS:
   try {
     const ai = getAI();
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-flash-latest",
       contents: [
         {
           parts: [
