@@ -23,44 +23,52 @@ export interface ExtractedData {
 }
 
 export async function extractScheduleFromImage(base64Data: string, mimeType: string): Promise<ExtractedData> {
-  const prompt = `Analise a tabela de horários escolar do 'COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA'.
+  const prompt = `Analise a tabela de horários escolar.
 Sua tarefa é extrair a GRADE COMPLETA de aulas de forma exaustiva.
 
 LAYOUT DA IMAGEM:
-- A imagem é uma tabela com COLUNAS representando as TURMAS (ex: "6A", "7B", "1A", "1B", "1º ANO A", "9A").
-- As LINHAS representam os PERÍODOS (1ª a 6ª aula) agrupados por DIA DA SEMANA (SEG, TER, QUA, QUI, SEX).
+- COLUNAS representam as TURMAS (ex: "6A", "7B", "1A", "1B", "2A", "3A").
+- LINHAS representam os PERÍODOS (1ª a 6ª aula) agrupados por DIA DA SEMANA (SEG, TER, QUA, QUI, SEX).
+- O dia da semana geralmente aparece em uma célula mesclada no início das linhas ou no topo.
 
 REGRAS DE EXTRAÇÃO (CRÍTICO):
-1. IDENTIFICAÇÃO DE TURMAS: Procure por nomes curtos no topo das colunas. 
-   - ATENÇÃO: Ignore colunas que listam apenas números sequenciais (1, 2, 3...) de alunos. 
-   - IGNORE QUALQUER COLUNA QUE TENHA UMA SEQUÊNCIA NUMÉRICA LONGA como título ou conteúdo predominante.
-2. GRADE (SCHEDULE): Extraia TODAS as células de aula para cada turma real.
-3. CHAVES DO SCHEDULE: Use rigorosamente o formato "dia-periodo" (ex: "seg-1", "seg-2", "ter-1", ..., "sex-6").
-4. CONTEÚDO: Extraia Disciplina e Professor. Mapeie "teacher" e "subject".
-5. EXAUSTIVIDADE: Tente extrair o máximo de turmas possível.
+1. IDENTIFICAÇÃO DE TURMAS: Procure pelos cabeçalhos das colunas (ex: 6A, 7A, 8A, 9A, 1A, 1B, 2A, 2B, 3A).
+   - IMPORTANTE: Extraia TODAS as turmas visíveis. Não pule nenhuma coluna que contenha horários.
+2. GRADE (SCHEDULE): Para cada intersecção de Turma (coluna) e Período (linha), extraia a Disciplina e o Professor.
+3. CHAVES DO SCHEDULE: Use o formato "dia-periodo" (ex: "seg-1", "seg-2", ..., "sex-6").
+   - Dias: seg, ter, qua, qui, sex.
+   - Períodos: 1, 2, 3, 4, 5, 6 (para manhã) ou 1, 2, 3, 4, 5 (para tarde).
+4. CONTEÚDO: Tente separar o NOME DO PROFESSOR e o NOME DA DISCIPLINA.
+5. TRATAMENTO DE ABREVIAÇÕES: 
+   - MAT -> MATEMATICA
+   - PORT / L.P -> PORTUGUES
+   - GEO -> GEOGRAFIA
+   - HIST -> HISTORIA
+   - CIEN / CIE -> CIENCIAS
+   - ART -> ARTES
+   - ED.FI / E.F -> EDUCACAO FISICA
+   - ING -> INGLES
 
 MAPEAR PARA ESTE JSON:
 {
-  "teachers": [{"name": "NOME COMPLETO", "subject": "MATÉRIA"}],
-  "subjects": [{"name": "MATÉRIA", "workload": 5}],
+  "teachers": [{"name": "NOME DO PROFESSOR", "subject": "DISCIPLINA"}],
+  "subjects": [{"name": "DISCIPLINA", "workload": 5}],
   "turmas": [
     {
-      "name": "NOME DA TURMA (ex: 6A)",
+      "name": "6A",
       "schedule": {
-        "seg-1": { "teacher": "PROFESSOR", "subject": "MATERIA" }
+        "seg-1": { "teacher": "PEDRO", "subject": "MATEMATICA" }
       }
     }
   ]
 }
 
-REGRAS FINAIS:
-- Retorne APENAS o JSON puro.
-- Expanda abreviações (MAT -> MATEMATICA, PORT -> PORTUGUES, GEO -> GEOGRAFIA, HIST -> HISTORIA, CIEN -> CIENCIAS).`
+Retorne APENAS o JSON puro.`
 
   try {
     const ai = getAI();
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       contents: [
         {
           parts: [

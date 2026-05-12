@@ -357,22 +357,34 @@ export default function ScheduleGenerator() {
             if (!newTurma || !newTurma.name || !newTurma.schedule) return;
             const normalizedTurmaName = normalize(newTurma.name);
             
-            // FILTRAGEM DE LIXO
+            // FILTRAGEM DE LIXO MAIS RADICAL - Apenas nomes muito longos ou puramente numéricos sem sentido
             const lettersCount = (newTurma.name.match(/[A-Za-z]/g) || []).length;
             const numbersCount = (newTurma.name.match(/\d/g) || []).length;
             
-            const isGarbage = (numbersCount > lettersCount && numbersCount > 2) || (newTurma.name.length > 20 && lettersCount < 4);
+            // Se for só número e tiver mais de 3 dígitos (provavelmente ID de aluno)
+            if (numbersCount > 2 && lettersCount === 0) return;
+            
             const isGenericHeader = normalizedTurmaName.includes('carga horaria') || 
                                    normalizedTurmaName.includes('total') || 
                                    normalizedTurmaName.includes('professor') || 
                                    normalizedTurmaName.includes('horario') ||
-                                   normalizedTurmaName.includes('obs');
+                                   normalizedTurmaName.includes('obs') ||
+                                   normalizedTurmaName.includes('escola');
 
-            if (newTurma.name.length > 30 || isGarbage || isGenericHeader || !newTurma.name.trim()) {
+            if (newTurma.name.length > 25 || isGenericHeader || !newTurma.name.trim()) {
               return;
             }
 
-            let turma = updatedTurmas.find(t => normalize(t.name) === normalizedTurmaName || normalizedTurmaName.includes(normalize(t.name)) || normalize(t.name).includes(normalizedTurmaName));
+            // Busca mais precisa - evita que "1A" dê match em "1B"
+            let turma = updatedTurmas.find(t => normalize(t.name) === normalizedTurmaName);
+            
+            // Se não achou exato, tenta um match parcial mas seguro
+            if (!turma) {
+                turma = updatedTurmas.find(t => {
+                    const normT = normalize(t.name);
+                    return (normT.length > 1 && (normalizedTurmaName === normT || normalizedTurmaName.startsWith(normT) || normT.startsWith(normalizedTurmaName)));
+                });
+            }
             
             if (!turma) {
               turma = { id: generateId(), name: newTurma.name, shift: importShift as any };
@@ -386,7 +398,7 @@ export default function ScheduleGenerator() {
               if (!extractedSlotId || !extractedSlotId.includes('-')) return;
               
               const [dayId, periodStr] = extractedSlotId.split('-');
-              const periodNum = parseInt(periodStr);
+              let periodNum = parseInt(periodStr.replace(/\D/g, '')); // Remove non-numbers e.g. "1a" -> "1"
               if (isNaN(periodNum)) return;
               
               const actualPeriod = importShift === 'tarde' ? periodNum + 6 : periodNum;
@@ -397,17 +409,25 @@ export default function ScheduleGenerator() {
               const normExtractedTeacher = normalize(slotData.teacher || "");
               const normExtractedSubject = normalize(slotData.subject || "");
 
-              // Match Teacher
-              let teacher = updatedTeachers.find(t => 
-                normalize(t.name) === normExtractedTeacher || 
-                (normExtractedTeacher.length > 3 && normExtractedTeacher.includes(normalize(t.name)))
-              );
+              // Match Teacher - Try exact first
+              let teacher = updatedTeachers.find(t => normalize(t.name) === normExtractedTeacher);
+              if (!teacher) {
+                  // Try partial
+                  teacher = updatedTeachers.find(t => 
+                    (normExtractedTeacher.length > 4 && normExtractedTeacher.includes(normalize(t.name))) ||
+                    (normalize(t.name).length > 4 && normalize(t.name).includes(normExtractedTeacher))
+                  );
+              }
                
-              // Match Subject
-              let subject = updatedSubjects.find(s => 
-                normalize(s.name) === normExtractedSubject || 
-                (normExtractedSubject.length > 3 && normExtractedSubject.includes(normalize(s.name)))
-              );
+              // Match Subject - Try exact first
+              let subject = updatedSubjects.find(s => normalize(s.name) === normExtractedSubject);
+              if (!subject) {
+                  // Try partial
+                  subject = updatedSubjects.find(s => 
+                    (normExtractedSubject.length > 3 && normExtractedSubject.includes(normalize(s.name))) ||
+                    (normalize(s.name).length > 3 && normalize(s.name).includes(normExtractedSubject))
+                  );
+              }
 
               if (teacher && !subject) {
                 subject = updatedSubjects.find(s => s.id === teacher!.subjectId);
@@ -433,13 +453,17 @@ export default function ScheduleGenerator() {
 
           const totalAulas = Object.values(updatedSchedules).reduce((acc: number, curr: any) => acc + Object.keys(curr).length, 0);
           
-          alert(`Importação concluída!\nTurmas: ${data.turmas.length}\nAulas mapeadas: ${totalAulas}`);
-          window.location.reload(); // Reload to ensure everything is fresh from localStorage (which gets updated by useEffect)
+          alert(`Importação concluída!\nTurmas: ${data.turmas.length}\nAulas extraídas: ${totalAulas}`);
         } catch (err) {
           console.error("Detailed processing error:", err);
           alert(`Erro ao processar arquivo: ${err instanceof Error ? err.message : "Erro desconhecido"}`);
         } finally {
           setIsImporting(false);
+          // Forçar persistência
+          localStorage.setItem('cecm_teachers', JSON.stringify(updatedTeachers));
+          localStorage.setItem('cecm_subjects', JSON.stringify(updatedSubjects));
+          localStorage.setItem('cecm_turmas', JSON.stringify(updatedTurmas));
+          localStorage.setItem('cecm_schedules', JSON.stringify(updatedSchedules));
         }
       };
       reader.readAsDataURL(file);
@@ -612,7 +636,7 @@ export default function ScheduleGenerator() {
                               const time = currentTimeRanges[pIndex];
                               
                               return `
-                                <tr>
+                                <tr class="${pIndex === 5 ? 'day-end' : ''}">
                                   ${pIndex === 0 ? `<td rowspan="6" class="day-cell"><span>${day.label}</span></td>` : ''}
                                   ${shiftTurmas.map(turma => {
                                     const slot = schedules[turma.id]?.[`${day.id}-${pId}`];
@@ -658,7 +682,7 @@ export default function ScheduleGenerator() {
                       <style>
                         @page { 
                           size: A4 landscape; 
-                          margin: 0.3cm; 
+                          margin: 0.2cm; 
                         }
                         * { box-sizing: border-box; }
                         body { 
@@ -674,21 +698,21 @@ export default function ScheduleGenerator() {
                         .print-container { 
                           page-break-after: always; 
                           width: 100%;
-                          height: 190mm;
+                          height: 185mm;
                           display: flex;
                           flex-direction: column;
                           overflow: hidden;
                         }
                         
-                        .print-header { text-align: center; margin-bottom: 3px; }
-                        .print-header h1 { font-size: 13pt; margin: 0; font-weight: 800; }
-                        .print-header h2 { font-size: 11pt; margin: 1px 0; font-weight: 700; color: #1e293b; }
+                        .print-header { text-align: center; margin-bottom: 1px; }
+                        .print-header h1 { font-size: 10pt; margin: 0; font-weight: 800; }
+                        .print-header h2 { font-size: 8.5pt; margin: 0; font-weight: 700; color: #1e293b; }
                         
                         .table-wrapper {
                           flex: 1;
                           width: 100%;
                           overflow: hidden;
-                          border: 1.5pt solid black;
+                          border: 0.8pt solid black;
                         }
                         
                         .grid-table { 
@@ -699,82 +723,74 @@ export default function ScheduleGenerator() {
                         }
                         
                         th, td { 
-                          border: 0.5pt solid black; 
+                          border: 0.1pt solid #000; 
                           text-align: center; 
                           vertical-align: middle;
-                          padding: 1px;
+                          padding: 0;
                         }
                         
-                        .corner-header { width: 30px; }
-                        .time-header { width: 140px; font-size: 8pt; font-weight: 800; background-color: #f1f5f9; }
+                        .corner-header { width: 22px; }
+                        .time-header { width: 100px; font-size: 7.2pt; font-weight: 800; background-color: #f1f5f9; }
                         
                         .turma-header { 
-                          background-color: #d1d5db; 
-                          font-size: 8pt; 
+                          background-color: #e2e8f0; 
+                          font-size: 7.2pt; 
                           font-weight: 800; 
-                          padding: 4px 0;
+                          padding: 2px 0;
                         }
                         
                         .day-cell { 
-                          background-color: #f1f5f9; 
-                          width: 30px;
+                          width: 22px;
+                          background-color: #f8fafc;
                           padding: 0;
                         }
                         .day-cell span {
                           display: block;
                           writing-mode: vertical-lr;
                           transform: rotate(180deg);
-                          font-size: 8pt; 
+                          font-size: 6.8pt; 
                           font-weight: 900; 
                           text-transform: uppercase;
-                          white-space: nowrap;
                           margin: 0 auto;
                         }
                         
                         .slot-cell { 
-                          height: 32pt;
                           overflow: hidden;
-                          min-width: 60pt;
                         }
                         
                         .subj-name { 
-                          font-size: 7.5pt; 
+                          font-size: 6.2pt; 
                           font-weight: 800; 
                           color: black; 
                           text-transform: uppercase;
-                          line-height: 1.1;
-                          display: -webkit-box;
-                          -webkit-line-clamp: 2;
-                          -webkit-box-orient: vertical;
+                          line-height: 1;
+                          white-space: nowrap;
                           overflow: hidden;
                         }
                         
                         .prof-name { 
-                          font-size: 6pt; 
+                          font-size: 4.8pt; 
                           color: #475569; 
-                          margin-top: 1px;
                           line-height: 1;
-                          overflow: hidden;
-                          text-overflow: ellipsis;
                           white-space: nowrap;
+                          overflow: hidden;
                         }
                         
                         .time-info { 
                           background-color: #f8fafc;
-                          padding: 1px;
-                          line-height: 1.1;
+                          line-height: 0.95;
                         }
-                        .p-num { display: block; font-size: 7.5pt; font-weight: 700; color: #2563eb; }
-                        .p-time { display: block; font-size: 6.5pt; font-weight: 400; color: #64748b; }
+                        .p-num { display: block; font-size: 6.2pt; font-weight: 700; color: #2563eb; }
+                        .p-time { display: block; font-size: 5.2pt; font-weight: 400; color: #64748b; }
                         
                         .print-footer {
-                          margin-top: 2px;
+                          margin-top: 1px;
                           text-align: right;
-                          font-size: 6pt;
+                          font-size: 4.8pt;
                           color: #94a3b8;
                         }
                         
-                        tbody tr:nth-of-type(6n) {
+                        tr.day-end {
                           border-bottom: 1.5pt solid black;
                         }
                       </style>
