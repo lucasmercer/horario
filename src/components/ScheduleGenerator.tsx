@@ -64,7 +64,7 @@ export default function ScheduleGenerator() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [schedules, setSchedules] = useState<AllSchedules>({});
-  const [version, setVersion] = useState<number>(5);
+  const [version, setVersion] = useState<number>(6);
   
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [importShift, setImportShift] = useState<'manha' | 'tarde'>('manha');
@@ -404,7 +404,7 @@ export default function ScheduleGenerator() {
                   
                   return `
                     <tr class="${pIndex === 5 ? 'day-end' : ''}">
-                      ${pIndex === 0 ? `<td rowspan="6" class="day-cell"><span>${day.label}</span></td>` : ''}
+                      ${pIndex === 0 ? `<td rowspan="7" class="day-cell"><span>${day.label}</span></td>` : ''}
                       <td class="p-num-cell">${pName}</td>
                       <td class="p-time-cell">${time}</td>
                       <td class="slot-cell">
@@ -412,6 +412,12 @@ export default function ScheduleGenerator() {
                         ${teacher ? `<div class="prof-name">${teacher.name}</div>` : ''}
                       </td>
                     </tr>
+                    ${pIndex === 2 ? `
+                      <tr class="interval-row">
+                        <td colspan="2" class="p-time-cell" style="background: #f8fafc; font-weight: 800; font-size: 7pt; color: #64748b;">${shift === 'manha' ? '10h às 10h20' : '15h30 às 15h50'}</td>
+                        <td class="slot-cell" style="background: #f8fafc; text-align: center; font-weight: 800; font-size: 8pt; letter-spacing: 0.2em; color: #94a3b8;">INTERVALO</td>
+                      </tr>
+                    ` : ''}
                   `;
                 }).join('');
               }).join('')}
@@ -851,7 +857,7 @@ export default function ScheduleGenerator() {
                               
                               return `
                                 <tr class="${pIndex === 5 ? 'day-end' : ''}">
-                                  ${pIndex === 0 ? `<td rowspan="6" class="day-cell"><span>${day.label}</span></td>` : ''}
+                                  ${pIndex === 0 ? `<td rowspan="7" class="day-cell"><span>${day.label}</span></td>` : ''}
                                   ${shiftTurmas.map(turma => {
                                     const slot = schedules[turma.id]?.[`${day.id}-${pId}`];
                                     const teacher = teachers.find(t => t.id === slot?.teacherId);
@@ -868,6 +874,15 @@ export default function ScheduleGenerator() {
                                     <span class="p-time">${time}</span>
                                   </td>
                                 </tr>
+                                ${pIndex === 2 ? `
+                                  <tr class="interval-row">
+                                    ${shiftTurmas.map(() => `<td class="slot-cell" style="background: #f8fafc; text-align: center; font-size: 5.5pt; font-weight: 800; color: #94a3b8; letter-spacing: 0.1em;">INTERVALO</td>`).join('')}
+                                    <td class="time-info" style="background: #f1f5f9;">
+                                      <span class="p-num" style="color: #64748b; font-size: 5pt;">INTERVALO</span>
+                                      <span class="p-time" style="font-size: 4.5pt;">${shift === 'manha' ? '10h-10h20' : '15h30-15h50'}</span>
+                                    </td>
+                                  </tr>
+                                ` : ''}
                               `;
                             }).join('');
                           }).join('')}
@@ -1096,64 +1111,81 @@ export default function ScheduleGenerator() {
                           : ["13h-13h50", "13h50-14h40", "14h40-15h30", "15h50-16h40", "16h40-17h30", "17h30-18h20"][pIndex];
 
                         return (
-                          <tr key={`${day.id}-${actualPeriod}`} className={`border-b border-slate-200 hover:bg-slate-50 transition-colors h-14 ${pIndex === 5 ? 'border-b-[3px] border-slate-900' : ''}`}>
-                            {/* Day Column (Sticky Left) */}
-                            {pIndex === 0 && (
-                              <td rowSpan={6} className="bg-slate-900 text-white p-0 w-10 min-w-[40px] max-w-[40px] border-r-2 border-slate-900 sticky left-0 z-40 shadow-[2px_0_10px_rgba(0,0,0,0.1)]">
-                                <div className="flex items-center justify-center h-full w-full">
-                                  <span className="text-[10px] font-black uppercase [writing-mode:vertical-lr] rotate-180 text-center tracking-widest whitespace-nowrap">
-                                    {day.label}
+                          <React.Fragment key={`${day.id}-${actualPeriod}`}>
+                            <tr className={`border-b border-slate-200 hover:bg-slate-50 transition-colors h-14 ${pIndex === 5 ? 'border-b-[3px] border-slate-900' : ''}`}>
+                              {/* Day Column (Sticky Left) */}
+                              {pIndex === 0 && (
+                                <td rowSpan={7} className="bg-slate-900 text-white p-0 w-10 min-w-[40px] max-w-[40px] border-r-2 border-slate-900 sticky left-0 z-40 shadow-[2px_0_10px_rgba(0,0,0,0.1)]">
+                                  <div className="flex items-center justify-center h-full w-full">
+                                    <span className="text-[10px] font-black uppercase [writing-mode:vertical-lr] rotate-180 text-center tracking-widest whitespace-nowrap">
+                                      {day.label}
+                                    </span>
+                                  </div>
+                                </td>
+                              )}
+                              
+                              {displayedTurmas.map(turma => {
+                                const slotId = `${day.id}-${actualPeriod}`;
+                                const slot = schedules[turma.id]?.[slotId];
+                                const teacher = teachers.find(t => t.id === slot?.teacherId);
+                                const subject = subjects.find(s => s.id === slot?.subjectId);
+                                const conflicts = getConflicts(day.id, actualPeriod, slot?.teacherId || '', turma.id);
+
+                                return (
+                                  <td 
+                                    key={turma.id}
+                                    onClick={() => handleSlotClick(day.id, actualPeriod, turma.id)}
+                                    className={`p-1.5 border-r border-slate-200 cursor-pointer transition-all group relative ${conflicts.length > 0 ? 'bg-red-50' : ''}`}
+                                  >
+                                    {slot ? (
+                                      <div className="flex flex-col items-center justify-center text-center overflow-hidden">
+                                        <span className={`text-[10px] font-black uppercase leading-[1.1] mb-0.5 ${conflicts.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                                          {subject?.name}
+                                        </span>
+                                        <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full">
+                                          {teacher?.name}
+                                        </span>
+                                        {conflicts.length > 0 && (
+                                          <div className="absolute top-0.5 right-0.5">
+                                            <AlertCircle className="w-2.5 h-2.5 text-red-500 fill-white" />
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Plus className="w-3.5 h-3.5 text-slate-400" />
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                              <td className="p-1.5 border-l border-slate-400 bg-slate-50 sticky right-0 z-10 shadow-[-2px_0_5px_rgba(0,0,0,0.05)] w-28">
+                                <div className="flex flex-col items-center justify-center gap-0.5">
+                                  <span className={`text-[9px] font-black uppercase shrink-0 ${importShift === 'manha' ? 'text-blue-600' : 'text-red-500'}`}>
+                                    {pIndex + 1}ª aula
+                                  </span>
+                                  <span className="text-[8px] font-bold text-slate-400 whitespace-nowrap">
+                                    {timeRange}
                                   </span>
                                 </div>
                               </td>
+                            </tr>
+                            {pIndex === 2 && (
+                               <tr className="border-b border-slate-300 bg-slate-50/50 h-8">
+                                 {displayedTurmas.map(turma => (
+                                   <td key={`intervalo-${turma.id}`} className="border-r border-slate-200 text-center">
+                                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Intervalo</span>
+                                   </td>
+                                 ))}
+                                 <td className="p-1 border-l border-slate-400 bg-slate-100 sticky right-0 z-10 shadow-[-2px_0_5px_rgba(0,0,0,0.05)]">
+                                   <div className="flex flex-col items-center justify-center">
+                                      <span className="text-[8px] font-black text-slate-400 uppercase leading-none">Intervalo</span>
+                                      <span className="text-[7px] font-bold text-slate-500 mt-0.5">{importShift === 'manha' ? '10h - 10h20' : '15h30 - 15h50'}</span>
+                                   </div>
+                                 </td>
+                               </tr>
                             )}
-                            
-                            {displayedTurmas.map(turma => {
-                              const slotId = `${day.id}-${actualPeriod}`;
-                              const slot = schedules[turma.id]?.[slotId];
-                              const teacher = teachers.find(t => t.id === slot?.teacherId);
-                              const subject = subjects.find(s => s.id === slot?.subjectId);
-                              const conflicts = getConflicts(day.id, actualPeriod, slot?.teacherId || '', turma.id);
-
-                              return (
-                                <td 
-                                  key={turma.id}
-                                  onClick={() => handleSlotClick(day.id, actualPeriod, turma.id)}
-                                  className={`p-1.5 border-r border-slate-200 cursor-pointer transition-all group relative ${conflicts.length > 0 ? 'bg-red-50' : ''}`}
-                                >
-                                  {slot ? (
-                                    <div className="flex flex-col items-center justify-center text-center overflow-hidden">
-                                      <span className={`text-[10px] font-black uppercase leading-[1.1] mb-0.5 ${conflicts.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>
-                                        {subject?.name}
-                                      </span>
-                                      <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full">
-                                        {teacher?.name}
-                                      </span>
-                                      {conflicts.length > 0 && (
-                                        <div className="absolute top-0.5 right-0.5">
-                                          <AlertCircle className="w-2.5 h-2.5 text-red-500 fill-white" />
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div className="h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <Plus className="w-3.5 h-3.5 text-slate-400" />
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            })}
-                            <td className="p-1.5 border-l border-slate-400 bg-slate-50 sticky right-0 z-10 shadow-[-2px_0_5px_rgba(0,0,0,0.05)] w-28">
-                              <div className="flex flex-col items-center justify-center gap-0.5">
-                                <span className={`text-[9px] font-black uppercase shrink-0 ${importShift === 'manha' ? 'text-blue-600' : 'text-red-500'}`}>
-                                  {pIndex + 1}ª aula
-                                </span>
-                                <span className="text-[8px] font-bold text-slate-400 whitespace-nowrap">
-                                  {timeRange}
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
+                          </React.Fragment>
                         );
                       })}
                     </React.Fragment>
