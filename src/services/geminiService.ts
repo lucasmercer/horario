@@ -5,7 +5,7 @@ let aiInstance: GoogleGenAI | null = null;
 function getAI() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-    throw new Error("Chave de API do Gemini não configurada. Por favor, adicione sua chave GEMINI_API_KEY no menu 'Settings > Secrets' do AI Studio para usar a importação por imagem.");
+    throw new Error("Chave de API do Gemini não encontrada no ambiente do AI Studio. \n\nIMPORTANTE: A chave deve ser adicionada no menu 'Settings' (ícone de engrenagem no canto inferior esquerdo ou superior direito) > 'Secrets' dentro do AI Studio, com o nome exato GEMINI_API_KEY. Configurações no GitHub não são lidas aqui durante o desenvolvimento.");
   }
   if (!aiInstance) {
     aiInstance = new GoogleGenAI({ apiKey });
