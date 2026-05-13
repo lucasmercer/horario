@@ -13,7 +13,8 @@ import {
   FileText,
   Loader2,
   Upload,
-  AlertCircle
+  AlertCircle,
+  Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { extractScheduleFromImage } from '../services/geminiService';
@@ -63,7 +64,7 @@ export default function ScheduleGenerator() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [schedules, setSchedules] = useState<AllSchedules>({});
-  const [version, setVersion] = useState<number>(4);
+  const [version, setVersion] = useState<number>(5);
   
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [importShift, setImportShift] = useState<'manha' | 'tarde'>('manha');
@@ -1431,7 +1432,7 @@ export default function ScheduleGenerator() {
                           onClick={() => startEditTurma(turma)} 
                           className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
                         >
-                          <Save className="w-4 h-4" />
+                          <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => removeTurma(turma.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
                           <Trash2 className="w-4 h-4" />
@@ -1553,7 +1554,7 @@ export default function ScheduleGenerator() {
                                 onClick={() => startEditTeacher(teacher)} 
                                 className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
                               >
-                                <Save className="w-4 h-4" />
+                                <Pencil className="w-4 h-4" />
                               </button>
                               <button onClick={() => removeTeacher(teacher.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
                                 <Trash2 className="w-4 h-4" />
@@ -1646,7 +1647,7 @@ export default function ScheduleGenerator() {
                           onClick={() => startEditSubject(subject)} 
                           className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
                         >
-                          <Save className="w-4 h-4" />
+                          <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => removeSubject(subject.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
                           <Trash2 className="w-4 h-4" />
