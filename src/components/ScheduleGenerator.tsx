@@ -21,7 +21,7 @@ import { extractScheduleFromImage } from '../services/geminiService';
 interface Teacher {
   id: string;
   name: string;
-  subjectId?: string;
+  subjectIds: string[]; // Alterado para suportar múltiplas disciplinas
 }
 
 interface Subject {
@@ -63,12 +63,13 @@ export default function ScheduleGenerator() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [schedules, setSchedules] = useState<AllSchedules>({});
+  const [version, setVersion] = useState<number>(2);
   
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [importShift, setImportShift] = useState<'manha' | 'tarde'>('manha');
   
   const [newTeacherName, setNewTeacherName] = useState('');
-  const [newTeacherSubjectId, setNewTeacherSubjectId] = useState('');
+  const [newTeacherSubjectIds, setNewTeacherSubjectIds] = useState<string[]>([]);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectWorkload, setNewSubjectWorkload] = useState<number>(2);
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
@@ -82,11 +83,35 @@ export default function ScheduleGenerator() {
   const [isImporting, setIsImporting] = useState(false);
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
+  const [isAddingTurma, setIsAddingTurma] = useState(false);
+  const [isPrintingTurmaSelection, setIsPrintingTurmaSelection] = useState(false);
+  const [newTurmaName, setNewTurmaName] = useState('');
+  const [newTurmaShift, setNewTurmaShift] = useState<'manha' | 'tarde'>('manha');
+  const [editingTurmaId, setEditingTurmaId] = useState<string | null>(null);
 
   // Filter turmas for the interactive grid - let's show all by default unless we really need filtering
   // The user complained about missing "middle" classes, so showing all might be safer
   // or at least ensure the ones without shift show up correctly.
-  const displayedTurmas = turmas.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const displayedTurmas = turmas
+    .filter(t => {
+      if (t.shift) return t.shift === importShift;
+      // Fallback for older data or implicitly named turmas
+      const isNamedTarde = t.name.toLowerCase().includes('tarde');
+      return importShift === 'manha' ? !isNamedTarde : isNamedTarde;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+  // Synchronize selected turma when shift changes or list changes
+  useEffect(() => {
+    if (displayedTurmas.length > 0) {
+      const isSelectedStillVisible = displayedTurmas.some(t => t.id === selectedTurmaId);
+      if (!isSelectedStillVisible) {
+        setSelectedTurmaId(displayedTurmas[0].id);
+      }
+    } else {
+      setSelectedTurmaId('');
+    }
+  }, [importShift, turmas.length]);
 
   // Safe UUID generator
   const generateId = () => {
@@ -105,9 +130,20 @@ export default function ScheduleGenerator() {
       const savedTurmas = localStorage.getItem('cecm_turmas');
       const savedSchedules = localStorage.getItem('cecm_schedules');
 
-      if (savedTeachers) setTeachers(JSON.parse(savedTeachers));
+      if (savedTeachers) {
+        let parsed = JSON.parse(savedTeachers);
+        // Migration: convert subjectId string to subjectIds array
+        parsed = parsed.map((t: any) => ({
+          ...t,
+          subjectIds: t.subjectIds || (t.subjectId ? [t.subjectId] : [])
+        }));
+        setTeachers(parsed);
+      }
       if (savedSubjects) setSubjects(JSON.parse(savedSubjects));
       
+      const savedVersion = localStorage.getItem('cecm_version');
+      if (savedVersion) setVersion(parseInt(savedVersion));
+
       if (savedTurmas) {
         const parsedTurmas = JSON.parse(savedTurmas);
         setTurmas(parsedTurmas);
@@ -156,9 +192,13 @@ export default function ScheduleGenerator() {
     localStorage.setItem('cecm_subjects', JSON.stringify(subjects));
     localStorage.setItem('cecm_turmas', JSON.stringify(turmas));
     localStorage.setItem('cecm_schedules', JSON.stringify(schedules));
-  }, [teachers, subjects, turmas, schedules]);
+    localStorage.setItem('cecm_version', version.toString());
+  }, [teachers, subjects, turmas, schedules, version]);
+
+  const incrementVersion = () => setVersion(v => v + 1);
 
   const handleSave = async () => {
+    incrementVersion();
     localStorage.setItem('cecm_teachers', JSON.stringify(teachers));
     localStorage.setItem('cecm_subjects', JSON.stringify(subjects));
     localStorage.setItem('cecm_turmas', JSON.stringify(turmas));
@@ -173,7 +213,7 @@ export default function ScheduleGenerator() {
     
     if (editingTeacherId) {
       setTeachers(prev => prev.map(t => t.id === editingTeacherId 
-        ? { ...t, name: newTeacherName, subjectId: newTeacherSubjectId || undefined } 
+        ? { ...t, name: newTeacherName, subjectIds: newTeacherSubjectIds } 
         : t
       ));
       setEditingTeacherId(null);
@@ -181,19 +221,20 @@ export default function ScheduleGenerator() {
       const newTeacher = { 
         id: generateId(), 
         name: newTeacherName,
-        subjectId: newTeacherSubjectId || undefined
+        subjectIds: newTeacherSubjectIds
       };
       setTeachers([...teachers, newTeacher]);
     }
     
+    incrementVersion();
     setNewTeacherName('');
-    setNewTeacherSubjectId('');
+    setNewTeacherSubjectIds([]);
   };
 
   const startEditTeacher = (teacher: Teacher) => {
     setEditingTeacherId(teacher.id);
     setNewTeacherName(teacher.name);
-    setNewTeacherSubjectId(teacher.subjectId || '');
+    setNewTeacherSubjectIds(teacher.subjectIds || []);
   };
 
   const addSubject = () => {
@@ -214,6 +255,7 @@ export default function ScheduleGenerator() {
       setSubjects([...subjects, newSubject]);
     }
     
+    incrementVersion();
     setNewSubjectName('');
     setNewSubjectWorkload(2);
   };
@@ -226,15 +268,52 @@ export default function ScheduleGenerator() {
 
   const removeTeacher = (id: string) => {
     setTeachers(teachers.filter(t => t.id !== id));
+    incrementVersion();
   };
 
   const removeSubject = (id: string) => {
     setSubjects(subjects.filter(s => s.id !== id));
+    incrementVersion();
   };
 
   const removeTurma = (id: string) => {
-    setTurmas(turmas.filter(t => t.id !== id));
-    if (selectedTurmaId === id) setSelectedTurmaId(turmas[0]?.id || '');
+    setTurmas(prev => prev.filter(t => t.id !== id));
+    setSchedules(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    incrementVersion();
+    if (selectedTurmaId === id) setSelectedTurmaId('');
+  };
+
+  const addTurma = () => {
+    if (!newTurmaName.trim()) return;
+    
+    if (editingTurmaId) {
+      setTurmas(prev => prev.map(t => t.id === editingTurmaId 
+        ? { ...t, name: newTurmaName, shift: newTurmaShift } 
+        : t
+      ));
+      setEditingTurmaId(null);
+    } else {
+      const newTurma = { 
+        id: generateId(), 
+        name: newTurmaName,
+        shift: newTurmaShift
+      };
+      setTurmas([...turmas, newTurma]);
+      if (!selectedTurmaId) setSelectedTurmaId(newTurma.id);
+    }
+    
+    incrementVersion();
+    setNewTurmaName('');
+  };
+
+  const startEditTurma = (turma: Turma) => {
+    setEditingTurmaId(turma.id);
+    setNewTurmaName(turma.name);
+    setNewTurmaShift(turma.shift || importShift); // Use active shift as default
   };
 
   const handleSlotClick = (dayId: string, periodId: number, turmaId: string) => {
@@ -249,6 +328,12 @@ export default function ScheduleGenerator() {
   const saveSlot = () => {
     if (!selectedSlot || !selectedTurmaId) return;
     
+    // Safety check if no subjects or teachers exist
+    if (subjects.length === 0 || teachers.length === 0) {
+      alert("É necessário cadastrar pelo menos uma disciplina e um professor primeiro.");
+      return;
+    }
+
     const currentSchedule = { ...(schedules[selectedTurmaId] || {}) };
     
     if (!tempTeacher || !tempSubject) {
@@ -273,6 +358,7 @@ export default function ScheduleGenerator() {
       [selectedTurmaId]: currentSchedule
     });
     
+    incrementVersion();
     setSelectedSlot(null);
   };
 
@@ -282,9 +368,126 @@ export default function ScheduleGenerator() {
     return Object.values(currentSchedule).filter((slot: ScheduleSlot) => slot.subjectId === subjectId).length;
   };
 
-  const printSchedule = () => {
-    window.focus();
-    window.print();
+  const handlePrintSingleTurma = (turma: Turma) => {
+    const shift = turma.shift || (turma.name.toLowerCase().includes('tarde') ? 'tarde' : 'manha');
+    const currentPeriods = shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
+    const timeRangesManha = ["7h30 às 8h20", "8h20 às 9h10", "9h10 às 10h", "10h20 às 11h10", "11h10 às 12h", "12h às 12h50"];
+    const timeRangesTarde = ["13h às 13h50", "13h50 às 14h40", "14h40 às 15h30", "15h50 às 16h40", "16h40 às 17h30", "17h30 às 18h20"];
+    const currentTimeRanges = shift === 'manha' ? timeRangesManha : timeRangesTarde;
+
+    const html = `
+      <div class="print-container">
+        <div class="print-header">
+          <h1>COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
+          <h2>HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift.toUpperCase()})</h2>
+        </div>
+        
+        <div class="table-wrapper">
+          <table class="grid-table">
+            <thead>
+              <tr>
+                <th class="day-col">DIA</th>
+                <th class="period-col">AULA</th>
+                <th class="time-col">HORÁRIO</th>
+                <th class="content-col">DISCIPLINA / PROFESSOR</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${DAYS.map((day) => {
+                return currentPeriods.map((pId, pIndex) => {
+                  const pName = `${pIndex + 1}ª aula`;
+                  const time = currentTimeRanges[pIndex];
+                  const slot = schedules[turma.id]?.[`${day.id}-${pId}`];
+                  const teacher = teachers.find(t => t.id === slot?.teacherId);
+                  const subject = subjects.find(s => s.id === slot?.subjectId);
+                  
+                  return `
+                    <tr class="${pIndex === 5 ? 'day-end' : ''}">
+                      ${pIndex === 0 ? `<td rowspan="6" class="day-cell"><span>${day.label}</span></td>` : ''}
+                      <td class="p-num-cell">${pName}</td>
+                      <td class="p-time-cell">${time}</td>
+                      <td class="slot-cell">
+                        ${subject ? `<div class="subj-name">${subject.name}</div>` : '-'}
+                        ${teacher ? `<div class="prof-name">${teacher.name}</div>` : ''}
+                      </td>
+                    </tr>
+                  `;
+                }).join('');
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="print-footer">
+          Sistema feito por: Prof. Lucas Mercer Leniar - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+        </div>
+      </div>
+    `;
+
+    return html;
+  };
+
+  const handlePrintAllTurmasIndividual = () => {
+    const html = turmas
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+      .map(t => handlePrintSingleTurma(t))
+      .join('');
+    
+    executePrint(html, 'Horários por Turma');
+  };
+
+  const executePrint = (html: string, title: string) => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>${title} - CECM</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+            <style>
+              @page { size: A4 portrait; margin: 0.5cm; }
+              body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: white; }
+              .print-container { 
+                page-break-after: always; 
+                width: 100%; 
+                display: flex; 
+                flex-direction: column; 
+              }
+              .print-header { text-align: center; margin-bottom: 10px; border-bottom: 1.5pt solid black; padding-bottom: 5px; }
+              .print-header h1 { font-size: 12pt; margin: 0; font-weight: 800; }
+              .print-header h2 { font-size: 10pt; margin: 3px 0; color: #1e293b; font-weight: 700; }
+              .table-wrapper { border: 1pt solid black; margin-top: 5px; }
+              .grid-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+              th, td { border: 0.5pt solid black; padding: 4px 2px; text-align: center; vertical-align: middle; }
+              th { background: #f1f5f9; font-weight: 800; font-size: 8pt; }
+              .day-col { width: 30px; }
+              .period-col { width: 60px; }
+              .time-col { width: 90px; }
+              .day-cell { font-weight: 900; background: #f8fafc; font-size: 8.5pt; }
+              .day-cell span { display: block; writing-mode: vertical-lr; transform: rotate(180deg); margin: 0 auto; }
+              .p-num-cell { font-weight: 700; color: #2563eb; font-size: 8pt; }
+              .p-time-cell { color: #64748b; font-size: 7.5pt; font-weight: 500; }
+              .slot-cell { text-align: left; padding-left: 10px; }
+              .subj-name { font-weight: 800; font-size: 9pt; text-transform: uppercase; margin-bottom: 1px; line-height: 1.1; }
+              .prof-name { font-size: 8pt; color: #475569; font-weight: 600; line-height: 1; }
+              .day-end { border-bottom: 1.5pt solid black; }
+              .print-footer { margin-top: 5px; text-align: right; font-size: 8.5pt; color: black; font-weight: 600; }
+            </style>
+          </head>
+          <body>
+            ${html}
+            <script>window.onload = () => { setTimeout(() => { window.print(); window.close(); }, 500); }</script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
+  const handlePrintTurmaSelection = (turma: Turma) => {
+    const html = handlePrintSingleTurma(turma);
+    executePrint(html, `Horário ${turma.name}`);
+    setIsPrintingTurmaSelection(false);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -341,10 +544,10 @@ export default function ScheduleGenerator() {
                 updatedTeachers.push({ 
                   id: generateId(), 
                   name: newTeacher.name,
-                  subjectId: linkedSubject?.id 
+                  subjectIds: linkedSubject ? [linkedSubject.id] : [] 
                 });
-              } else if (!existingTeacher.subjectId && linkedSubject) {
-                existingTeacher.subjectId = linkedSubject.id;
+              } else if (linkedSubject && !existingTeacher.subjectIds.includes(linkedSubject.id)) {
+                existingTeacher.subjectIds.push(linkedSubject.id);
               }
             });
           }
@@ -430,10 +633,10 @@ export default function ScheduleGenerator() {
               }
 
               if (teacher && !subject) {
-                subject = updatedSubjects.find(s => s.id === teacher!.subjectId);
+                subject = updatedSubjects.find(s => teacher!.subjectIds.includes(s.id));
               }
               if (subject && !teacher) {
-                teacher = updatedTeachers.find(t => t.subjectId === subject!.id);
+                teacher = updatedTeachers.find(t => t.subjectIds.includes(subject!.id));
               }
               
               if (teacher && subject) {
@@ -450,6 +653,7 @@ export default function ScheduleGenerator() {
           setTeachers(updatedTeachers);
           setTurmas(updatedTurmas);
           setSchedules(updatedSchedules);
+          incrementVersion();
 
           const totalAulas = Object.values(updatedSchedules).reduce((acc: number, curr: any) => acc + Object.keys(curr).length, 0);
           
@@ -459,11 +663,6 @@ export default function ScheduleGenerator() {
           alert(`Erro ao processar arquivo: ${err instanceof Error ? err.message : "Erro desconhecido"}`);
         } finally {
           setIsImporting(false);
-          // Forçar persistência
-          localStorage.setItem('cecm_teachers', JSON.stringify(updatedTeachers));
-          localStorage.setItem('cecm_subjects', JSON.stringify(updatedSubjects));
-          localStorage.setItem('cecm_turmas', JSON.stringify(updatedTurmas));
-          localStorage.setItem('cecm_schedules', JSON.stringify(updatedSchedules));
         }
       };
       reader.readAsDataURL(file);
@@ -487,10 +686,20 @@ export default function ScheduleGenerator() {
           <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest pl-2">
             Gestão de Horários
           </h2>
+          <div className="px-2 py-1 bg-slate-100 rounded-md text-[9px] font-black text-slate-500 uppercase tracking-tighter">
+            Versão {version}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* Management Toggles */}
           <div className="flex border-r border-slate-100 pr-4 mr-2 gap-2">
+            <button 
+              onClick={() => setIsAddingSubject(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-xs font-bold transition-all"
+            >
+              <BookOpen className="w-4 h-4" />
+              Disciplinas
+            </button>
             <button 
               onClick={() => setIsAddingTeacher(true)}
               className="flex items-center gap-2 px-4 py-2 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-xs font-bold transition-all"
@@ -499,11 +708,11 @@ export default function ScheduleGenerator() {
               Professores
             </button>
             <button 
-              onClick={() => setIsAddingSubject(true)}
+              onClick={() => setIsAddingTurma(true)}
               className="flex items-center gap-2 px-4 py-2 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-xs font-bold transition-all"
             >
-              <BookOpen className="w-4 h-4" />
-              Disciplinas
+              <Calendar className="w-4 h-4" />
+              Turmas
             </button>
           </div>
 
@@ -530,6 +739,7 @@ export default function ScheduleGenerator() {
                   const updatedSchedules = { ...schedules };
                   delete updatedSchedules[selectedTurmaId];
                   setSchedules(updatedSchedules);
+                  incrementVersion();
                 }
               }}
               className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-amber-600 hover:bg-amber-50 transition-all border border-transparent hover:border-amber-100"
@@ -541,6 +751,7 @@ export default function ScheduleGenerator() {
               onClick={() => {
                 if (confirm('Limpar o horário de TODAS as turmas? (Professores e Matérias serão mantidos)')) {
                   setSchedules({});
+                  incrementVersion();
                 }
               }}
               className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-orange-600 hover:bg-orange-50 transition-all border border-transparent hover:border-orange-100"
@@ -555,10 +766,12 @@ export default function ScheduleGenerator() {
                   setSubjects([]);
                   setSchedules({});
                   setTurmas([]);
+                  setVersion(1);
                   localStorage.removeItem('cecm_teachers');
                   localStorage.removeItem('cecm_subjects');
                   localStorage.removeItem('cecm_turmas');
                   localStorage.removeItem('cecm_schedules');
+                  localStorage.removeItem('cecm_version');
                   window.location.reload();
                 }
               }}
@@ -592,7 +805,7 @@ export default function ScheduleGenerator() {
             {isSaved ? 'Salvo!' : 'Salvar'}
           </button>
           <button 
-            onClick={printSchedule}
+            onClick={() => setIsPrintingTurmaSelection(true)}
             className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
           >
             <Printer className="w-4 h-4" />
@@ -662,7 +875,7 @@ export default function ScheduleGenerator() {
                     </div>
                     
                     <div class="print-footer">
-                      ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      Sistema feito por: Prof. Lucas Mercer Leniar - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                 `;
@@ -698,15 +911,17 @@ export default function ScheduleGenerator() {
                         .print-container { 
                           page-break-after: always; 
                           width: 100%;
-                          height: 185mm;
+                          /* Removido altura fixa para evitar quebra em 2 folhas se o conteúdo for denso */
+                          height: auto;
+                          min-height: 170mm;
                           display: flex;
                           flex-direction: column;
                           overflow: hidden;
                         }
                         
-                        .print-header { text-align: center; margin-bottom: 1px; }
-                        .print-header h1 { font-size: 10pt; margin: 0; font-weight: 800; }
-                        .print-header h2 { font-size: 8.5pt; margin: 0; font-weight: 700; color: #1e293b; }
+                        .print-header { text-align: center; margin-bottom: 0px; }
+                        .print-header h1 { font-size: 9pt; margin: 0; font-weight: 800; }
+                        .print-header h2 { font-size: 8pt; margin: 0; font-weight: 700; color: #1e293b; }
                         
                         .table-wrapper {
                           flex: 1;
@@ -726,7 +941,7 @@ export default function ScheduleGenerator() {
                           border: 0.1pt solid #000; 
                           text-align: center; 
                           vertical-align: middle;
-                          padding: 0;
+                          padding: 1px 0; /* Padding mínimo vertical */
                         }
                         
                         .corner-header { width: 22px; }
@@ -734,9 +949,9 @@ export default function ScheduleGenerator() {
                         
                         .turma-header { 
                           background-color: #e2e8f0; 
-                          font-size: 7.2pt; 
+                          font-size: 7pt; 
                           font-weight: 800; 
-                          padding: 2px 0;
+                          padding: 1px 0;
                         }
                         
                         .day-cell { 
@@ -756,10 +971,12 @@ export default function ScheduleGenerator() {
                         
                         .slot-cell { 
                           overflow: hidden;
+                          height: 13pt; /* Reduzindo ainda mais */
+                          line-height: 1;
                         }
                         
                         .subj-name { 
-                          font-size: 6.2pt; 
+                          font-size: 6pt; 
                           font-weight: 800; 
                           color: black; 
                           text-transform: uppercase;
@@ -769,7 +986,7 @@ export default function ScheduleGenerator() {
                         }
                         
                         .prof-name { 
-                          font-size: 4.8pt; 
+                          font-size: 4.5pt; 
                           color: #475569; 
                           line-height: 1;
                           white-space: nowrap;
@@ -778,16 +995,18 @@ export default function ScheduleGenerator() {
                         
                         .time-info { 
                           background-color: #f8fafc;
-                          line-height: 0.95;
+                          line-height: 0.85;
+                          height: 13pt;
                         }
-                        .p-num { display: block; font-size: 6.2pt; font-weight: 700; color: #2563eb; }
-                        .p-time { display: block; font-size: 5.2pt; font-weight: 400; color: #64748b; }
+                        .p-num { display: block; font-size: 5.8pt; font-weight: 700; color: #2563eb; }
+                        .p-time { display: block; font-size: 4.8pt; font-weight: 400; color: #64748b; }
                         
                         .print-footer {
-                          margin-top: 1px;
+                          margin-top: 2px;
                           text-align: right;
-                          font-size: 4.8pt;
-                          color: #94a3b8;
+                          font-size: 6.5pt;
+                          color: black;
+                          font-weight: 600;
                         }
                         
                         tr.day-end {
@@ -868,10 +1087,9 @@ export default function ScheduleGenerator() {
                   </tr>
                 </thead>
                 <tbody>
-                  {DAYS.map((day) => (
+                      {DAYS.map((day) => (
                     <React.Fragment key={day.id}>
-                      {PERIODS_MANHA.map((period, pIndex) => {
-                        const actualPeriod = importShift === 'manha' ? period : period + 6;
+                      {(importShift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE).map((actualPeriod, pIndex) => {
                         const timeRange = importShift === 'manha' 
                           ? ["7h30-8h20", "8h20-9h10", "9h10-10h", "10h20-11h10", "11h10-12h", "12h-12h50"][pIndex]
                           : ["13h-13h50", "13h50-14h40", "14h40-15h30", "15h50-16h40", "16h40-17h30", "17h30-18h20"][pIndex];
@@ -943,8 +1161,8 @@ export default function ScheduleGenerator() {
               </table>
             </div>
             <div className="p-3 bg-slate-50 border-t-2 border-slate-900 text-center">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-                {new Date().toLocaleDateString('pt-BR')} - Atualização de Grade
+              <p className="text-[11px] font-black text-slate-900 uppercase tracking-[0.3em]">
+                Sistema feito por: Prof. Lucas Mercer Leniar - Versão {version} - {new Date().toLocaleDateString('pt-BR')} - Atualização de Grade
               </p>
             </div>
           </div>
@@ -991,8 +1209,8 @@ export default function ScheduleGenerator() {
                     onChange={e => {
                       const sId = e.target.value;
                       setTempSubject(sId);
-                      // Auto-select first teacher linked to this subject if any
-                      const linkedTeacher = teachers.find(t => t.subjectId === sId);
+                      // Se houver professores que ensinam esta disciplina, selecionar o primeiro
+                      const linkedTeacher = teachers.find(t => t.subjectIds.includes(sId));
                       if (linkedTeacher) {
                         setTempTeacher(linkedTeacher.id);
                       }
@@ -1025,8 +1243,9 @@ export default function ScheduleGenerator() {
                       const tId = e.target.value;
                       setTempTeacher(tId);
                       const teacher = teachers.find(t => t.id === tId);
-                      if (teacher?.subjectId) {
-                        setTempSubject(teacher.subjectId);
+                      // Se este professor só ensina uma disciplina e nenhuma está selecionada, auto-selecionar
+                      if (teacher && teacher.subjectIds.length === 1 && !tempSubject) {
+                        setTempSubject(teacher.subjectIds[0]);
                       }
                     }}
                     className={`w-full px-4 py-3 border-2 rounded-xl text-xs font-bold transition-all focus:outline-none ${
@@ -1036,9 +1255,20 @@ export default function ScheduleGenerator() {
                     }`}
                   >
                     <option value="">Selecionar Professor</option>
-                    {teachers.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
+                    {teachers
+                      .filter(t => !tempSubject || t.subjectIds.includes(tempSubject))
+                      .map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    {tempSubject && teachers.filter(t => !t.subjectIds.includes(tempSubject)).length > 0 && (
+                      <optgroup label="Outros Professores">
+                        {teachers
+                          .filter(t => !t.subjectIds.includes(tempSubject))
+                          .map(t => (
+                            <option key={t.id} value={t.id}>{t.name} (Outra Disc.)</option>
+                          ))}
+                      </optgroup>
+                    )}
                   </select>
                   
                   {getConflicts(selectedSlot.split('-')[0], parseInt(selectedSlot.split('-')[1]), tempTeacher, selectedTurmaId).length > 0 && (
@@ -1081,6 +1311,141 @@ export default function ScheduleGenerator() {
         )}
       </AnimatePresence>
 
+      {/* Turmas Management Modal */}
+      <AnimatePresence>
+        {isPrintingTurmaSelection && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl space-y-6"
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex flex-col">
+                  <h3 className="text-xl font-black text-slate-900 uppercase">
+                    Imprimir Horário por Turma
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Selecione a turma desejada</p>
+                </div>
+                <button 
+                  onClick={() => setIsPrintingTurmaSelection(false)} 
+                  className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto px-1 custom-scrollbar">
+                <button 
+                  onClick={handlePrintAllTurmasIndividual}
+                  className="col-span-2 flex flex-col items-center justify-center p-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all group border-2 border-blue-700/20"
+                >
+                  <Printer className="w-6 h-6 mb-2 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-black uppercase tracking-wider">Imprimir Todas as Turmas</span>
+                  <span className="text-[9px] font-bold text-blue-100 mt-1 uppercase">(Uma página por turma - A4 modo Retrato)</span>
+                </button>
+                
+                <div className="col-span-2 h-px bg-slate-100 my-2" />
+
+                {turmas.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(turma => (
+                  <button 
+                    key={turma.id}
+                    onClick={() => handlePrintTurmaSelection(turma)}
+                    className="flex items-center justify-between p-4 bg-white border-2 border-slate-100 rounded-2xl hover:border-blue-500 hover:bg-blue-50 transition-all group"
+                  >
+                    <div className="flex flex-col text-left">
+                      <span className="text-sm font-black text-slate-800">{turma.name}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift || 'Período indefinido'}</span>
+                    </div>
+                    <Printer className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Turmas Management Modal */}
+      <AnimatePresence>
+        {isAddingTurma && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl space-y-6"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-black text-slate-900 uppercase">
+                  {editingTurmaId ? 'Editar Turma' : 'Gerenciar Turmas'}
+                </h3>
+                <button 
+                  onClick={() => {
+                    setIsAddingTurma(false);
+                    setEditingTurmaId(null);
+                    setNewTurmaName('');
+                  }} 
+                  className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-2">
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={newTurmaName}
+                      onChange={e => setNewTurmaName(e.target.value)}
+                      placeholder="Nome da Turma (Ex: 6ºA)"
+                      className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
+                    />
+                    <button onClick={addTurma} className={`px-6 rounded-xl transition-all ${editingTurmaId ? 'bg-[#657c36] text-white' : 'bg-slate-900 text-white hover:bg-black'}`}>
+                      {editingTurmaId ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={newTurmaShift}
+                      onChange={e => setNewTurmaShift(e.target.value as any)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-black text-slate-500 focus:outline-none focus:border-slate-900 transition-all"
+                    >
+                      <option value="manha">Período: Manhã</option>
+                      <option value="tarde">Período: Tarde</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                  {turmas.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(turma => (
+                    <div key={turma.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-black text-slate-800">{turma.name}</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift || 'Período não definido'}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => startEditTurma(turma)} 
+                          className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
+                        >
+                          <Save className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => removeTurma(turma.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Teachers Management Modal */}
       <AnimatePresence>
         {isAddingTeacher && (
@@ -1100,7 +1465,7 @@ export default function ScheduleGenerator() {
                     setIsAddingTeacher(false);
                     setEditingTeacherId(null);
                     setNewTeacherName('');
-                    setNewTeacherSubjectId('');
+                    setNewTeacherSubjectIds([]);
                   }} 
                   className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500"
                 >
@@ -1109,55 +1474,97 @@ export default function ScheduleGenerator() {
               </div>
 
               <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-2">
-                  <input 
-                    type="text" 
-                    value={newTeacherName}
-                    onChange={e => setNewTeacherName(e.target.value)}
-                    placeholder="Nome do Professor"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
-                  />
-                  <div className="flex gap-2">
-                    <select
-                      value={newTeacherSubjectId}
-                      onChange={e => setNewTeacherSubjectId(e.target.value)}
-                      className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-black text-slate-500 focus:outline-none focus:border-slate-900 transition-all"
+                {subjects.length === 0 ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col items-center gap-3 text-center">
+                    <AlertCircle className="w-8 h-8 text-amber-500" />
+                    <p className="text-xs font-bold text-amber-900">
+                      Você precisa cadastrar as <span className="underline">Disciplinas</span> antes de adicionar professores.
+                    </p>
+                    <button 
+                      onClick={() => {
+                        setIsAddingTeacher(false);
+                        setIsAddingSubject(true);
+                      }}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-black uppercase"
                     >
-                      <option value="">Vincular Disciplina</option>
-                      {subjects.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                    <button onClick={addTeacher} className={`px-6 rounded-xl transition-all ${editingTeacherId ? 'bg-[#657c36] text-white' : 'bg-slate-900 text-white hover:bg-black'}`}>
-                      {editingTeacherId ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                      Ir para Disciplinas
                     </button>
                   </div>
-                </div>
-
-                <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                  {teachers.map(teacher => {
-                    const subject = subjects.find(s => s.id === teacher.subjectId);
-                    return (
-                      <div key={teacher.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-black text-slate-800">{teacher.name}</span>
-                          {subject && <span className="text-[9px] font-bold text-[#657c36] uppercase">{subject.name}</span>}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button 
-                            onClick={() => startEditTeacher(teacher)} 
-                            className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
-                          >
-                            <Save className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => removeTeacher(teacher.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 gap-3">
+                      <input 
+                        type="text" 
+                        value={newTeacherName}
+                        onChange={e => setNewTeacherName(e.target.value)}
+                        placeholder="Nome do Professor"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
+                      />
+                      
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Selecione as Disciplinas</label>
+                        <div className="max-h-32 overflow-y-auto border border-slate-100 rounded-xl p-2 space-y-1 custom-scrollbar bg-slate-50">
+                          {subjects.map(s => (
+                            <label key={s.id} className="flex items-center gap-2 p-2 hover:bg-white rounded-lg cursor-pointer transition-all border border-transparent hover:border-slate-100 group">
+                              <input 
+                                type="checkbox"
+                                checked={newTeacherSubjectIds.includes(s.id)}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setNewTeacherSubjectIds([...newTeacherSubjectIds, s.id]);
+                                  } else {
+                                    setNewTeacherSubjectIds(newTeacherSubjectIds.filter(id => id !== s.id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded-md border-slate-300 text-[#657c36] focus:ring-[#657c36]"
+                              />
+                              <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900">{s.name}</span>
+                            </label>
+                          ))}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      <button 
+                        onClick={addTeacher} 
+                        className={`w-full py-3 rounded-xl font-black uppercase text-xs transition-all flex items-center justify-center gap-2 ${
+                          editingTeacherId ? 'bg-[#657c36] text-white' : 'bg-slate-900 text-white hover:bg-black'
+                        }`}
+                      >
+                        {editingTeacherId ? <><CheckCircle2 className="w-4 h-4" /> Salvar Alterações</> : <><Plus className="w-4 h-4" /> Cadastrar Professor</>}
+                      </button>
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                      {teachers.map(teacher => {
+                        const teacherSubjects = subjects.filter(s => teacher.subjectIds?.includes(s.id));
+                        return (
+                          <div key={teacher.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
+                            <div className="flex flex-col max-w-[70%]">
+                              <span className="text-xs font-black text-slate-800">{teacher.name}</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {teacherSubjects.map(s => (
+                                  <span key={s.id} className="text-[8px] font-black bg-[#657c36]/10 text-[#657c36] px-1.5 py-0.5 rounded uppercase">{s.name}</span>
+                                ))}
+                                {teacherSubjects.length === 0 && <span className="text-[8px] font-bold text-slate-400">Sem disciplina vinculada</span>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button 
+                                onClick={() => startEditTeacher(teacher)} 
+                                className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
+                              >
+                                <Save className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => removeTeacher(teacher.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             </motion.div>
           </div>
@@ -1183,7 +1590,7 @@ export default function ScheduleGenerator() {
                     setIsAddingSubject(false);
                     setEditingSubjectId(null);
                     setNewSubjectName('');
-                    setNewSubjectWorkload(1);
+                    setNewSubjectWorkload(2);
                   }} 
                   className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500"
                 >
