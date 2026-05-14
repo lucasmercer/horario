@@ -476,7 +476,7 @@ export default function ScheduleGenerator() {
               .p-time-cell { color: #64748b; font-size: 6.5pt; font-weight: 500; }
               .slot-cell { text-align: left; padding-left: 8px; }
               .subj-name { font-weight: 800; font-size: 8.5pt; text-transform: uppercase; margin-bottom: 0px; line-height: 1.1; }
-              .prof-name { font-size: 7.5pt; color: #475569; font-weight: 600; line-height: 1; }
+              .prof-name { font-size: 8.5pt; color: #475569; font-weight: 600; line-height: 1; }
               .day-end { border-bottom: 1.5pt solid black; }
               .print-footer { margin-top: 4px; text-align: right; font-size: 7.5pt; color: black; font-weight: 600; }
             </style>
@@ -1002,7 +1002,7 @@ export default function ScheduleGenerator() {
                         }
                         
                         .prof-name { 
-                          font-size: 4.5pt; 
+                          font-size: 5.5pt; 
                           color: #475569; 
                           line-height: 1;
                           white-space: nowrap;

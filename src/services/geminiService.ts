@@ -4,8 +4,8 @@ let aiInstance: GoogleGenAI | null = null;
 
 function getAI() {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-    throw new Error("Chave de API do Gemini não encontrada no ambiente do AI Studio. \n\nIMPORTANTE: A chave deve ser adicionada no menu 'Settings' (ícone de engrenagem no canto inferior esquerdo ou superior direito) > 'Secrets' dentro do AI Studio, com o nome exato GEMINI_API_KEY. Configurações no GitHub não são lidas aqui durante o desenvolvimento.");
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey === '') {
+    throw new Error("Configuração da API Gemini pendente. \n\nPara resolver:\n1. Vá no menu 'Settings' (ícone de engrenagem) > 'Secrets'.\n2. Adicione uma chave chamada GEMINI_API_KEY com uma chave válida do Google AI Studio (ai.google.dev).");
   }
   if (!aiInstance) {
     aiInstance = new GoogleGenAI({ apiKey });
@@ -68,7 +68,7 @@ Retorne APENAS o JSON puro.`
   try {
     const ai = getAI();
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-flash-latest",
       contents: [
         {
           parts: [
