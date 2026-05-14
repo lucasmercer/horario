@@ -789,7 +789,7 @@ export default function ScheduleGenerator() {
             </button>
           </div>
 
-          <label className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          <label className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-sm hover:shadow-md active:scale-[0.98] min-w-[110px] ${
             isImporting ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-700'
           }`}>
             {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
@@ -804,7 +804,7 @@ export default function ScheduleGenerator() {
           </label>
           <button 
             onClick={handleSave}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[110px] ${
               isSaved ? 'bg-green-500 text-white' : 'bg-slate-900 text-white hover:bg-black'
             }`}
           >
@@ -813,7 +813,7 @@ export default function ScheduleGenerator() {
           </button>
           <button 
             onClick={() => setIsPrintingTurmaSelection(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[110px]"
           >
             <Printer className="w-4 h-4" />
             Imprimir Turma
@@ -1045,10 +1045,10 @@ export default function ScheduleGenerator() {
                 printWindow.document.close();
               }
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg"
+            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[110px]"
           >
             <Printer className="w-4 h-4" />
-            Imprimir Quadro Geral
+            Imprimir Quadro
           </button>
         </div>
       </div>
