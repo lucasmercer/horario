@@ -64,7 +64,7 @@ export default function ScheduleGenerator() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [schedules, setSchedules] = useState<AllSchedules>({});
-  const [version, setVersion] = useState<number>(6);
+  const [version, setVersion] = useState<number>(10);
   
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [importShift, setImportShift] = useState<'manha' | 'tarde'>('manha');
@@ -414,8 +414,8 @@ export default function ScheduleGenerator() {
                     </tr>
                     ${pIndex === 2 ? `
                       <tr class="interval-row">
-                        <td colspan="2" class="p-time-cell" style="background: #f8fafc; font-weight: 800; font-size: 7pt; color: #64748b;">${shift === 'manha' ? '10h às 10h20' : '15h30 às 15h50'}</td>
-                        <td class="slot-cell" style="background: #f8fafc; text-align: center; font-weight: 800; font-size: 8pt; letter-spacing: 0.2em; color: #94a3b8;">INTERVALO</td>
+                        <td colspan="2" class="p-time-cell" style="background: #f8fafc; font-weight: 800; font-size: 6.5pt; color: #64748b;">${shift === 'manha' ? '10h às 10h20' : '15h30 às 15h50'}</td>
+                        <td class="slot-cell" style="background: #f8fafc; text-align: center; font-weight: 800; font-size: 7.5pt; letter-spacing: 0.15em; color: #94a3b8;">INTERVALO</td>
                       </tr>
                     ` : ''}
                   `;
@@ -452,7 +452,7 @@ export default function ScheduleGenerator() {
             <title>${title} - CECM</title>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
             <style>
-              @page { size: A4 portrait; margin: 0.5cm; }
+              @page { size: A4 portrait; margin: 0.4cm; }
               body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: white; }
               .print-container { 
                 page-break-after: always; 
@@ -460,25 +460,25 @@ export default function ScheduleGenerator() {
                 display: flex; 
                 flex-direction: column; 
               }
-              .print-header { text-align: center; margin-bottom: 10px; border-bottom: 1.5pt solid black; padding-bottom: 5px; }
-              .print-header h1 { font-size: 12pt; margin: 0; font-weight: 800; }
-              .print-header h2 { font-size: 10pt; margin: 3px 0; color: #1e293b; font-weight: 700; }
-              .table-wrapper { border: 1pt solid black; margin-top: 5px; }
+              .print-header { text-align: center; margin-bottom: 8px; border-bottom: 1.5pt solid black; padding-bottom: 4px; }
+              .print-header h1 { font-size: 11pt; margin: 0; font-weight: 800; }
+              .print-header h2 { font-size: 9pt; margin: 2px 0; color: #1e293b; font-weight: 700; }
+              .table-wrapper { border: 1pt solid black; margin-top: 4px; }
               .grid-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-              th, td { border: 0.5pt solid black; padding: 4px 2px; text-align: center; vertical-align: middle; }
-              th { background: #f1f5f9; font-weight: 800; font-size: 8pt; }
-              .day-col { width: 30px; }
-              .period-col { width: 60px; }
-              .time-col { width: 90px; }
-              .day-cell { font-weight: 900; background: #f8fafc; font-size: 8.5pt; }
+              th, td { border: 0.5pt solid black; padding: 3px 2px; text-align: center; vertical-align: middle; }
+              th { background: #f1f5f9; font-weight: 800; font-size: 7.5pt; }
+              .day-col { width: 25px; }
+              .period-col { width: 55px; }
+              .time-col { width: 85px; }
+              .day-cell { font-weight: 900; background: #f8fafc; font-size: 8pt; }
               .day-cell span { display: block; writing-mode: vertical-lr; transform: rotate(180deg); margin: 0 auto; }
-              .p-num-cell { font-weight: 700; color: #2563eb; font-size: 8pt; }
-              .p-time-cell { color: #64748b; font-size: 7.5pt; font-weight: 500; }
-              .slot-cell { text-align: left; padding-left: 10px; }
-              .subj-name { font-weight: 800; font-size: 9pt; text-transform: uppercase; margin-bottom: 1px; line-height: 1.1; }
-              .prof-name { font-size: 8pt; color: #475569; font-weight: 600; line-height: 1; }
+              .p-num-cell { font-weight: 700; color: #2563eb; font-size: 7pt; }
+              .p-time-cell { color: #64748b; font-size: 6.5pt; font-weight: 500; }
+              .slot-cell { text-align: left; padding-left: 8px; }
+              .subj-name { font-weight: 800; font-size: 8.5pt; text-transform: uppercase; margin-bottom: 0px; line-height: 1.1; }
+              .prof-name { font-size: 7.5pt; color: #475569; font-weight: 600; line-height: 1; }
               .day-end { border-bottom: 1.5pt solid black; }
-              .print-footer { margin-top: 5px; text-align: right; font-size: 8.5pt; color: black; font-weight: 600; }
+              .print-footer { margin-top: 4px; text-align: right; font-size: 7.5pt; color: black; font-weight: 600; }
             </style>
           </head>
           <body>
