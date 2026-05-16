@@ -1513,15 +1513,18 @@ export default function ScheduleGenerator() {
                             {/* Manhã */}
                             <div>
                               <h4 className="text-[9px] font-black text-[#657c36] uppercase tracking-wider mb-2 border-b border-[#657c36]/10 pb-1">Período da Manhã</h4>
-                              <div className="grid grid-cols-7 gap-1">
+                              <div className="grid grid-cols-6 gap-1">
                                 <div className="col-span-1"></div>
-                                {[1,2,3,4,5,6].map(p => (
-                                  <div key={p} className="text-[8px] font-black text-slate-400 text-center">{p}ª</div>
-                                ))}
                                 {DAYS.map(day => (
-                                  <React.Fragment key={day.id}>
-                                    <div className="text-[9px] font-black text-slate-500 flex items-center capitalize h-6">{day.id}</div>
-                                    {[1,2,3,4,5,6].map(p => {
+                                  <div key={day.id} className="text-[10px] font-black text-slate-400 text-center uppercase tracking-tighter">{day.id}</div>
+                                ))}
+                                
+                                {[1,2,3,4,5,6].map(p => (
+                                  <React.Fragment key={p}>
+                                    <div className="text-[10px] font-black text-slate-500 flex items-center justify-center p-0.5 h-7">
+                                      {p}ª
+                                    </div>
+                                    {DAYS.map(day => {
                                       const slotId = `${day.id}-${p}`;
                                       const isSelected = newTeacherAvailability.includes(slotId);
                                       return (
@@ -1535,7 +1538,7 @@ export default function ScheduleGenerator() {
                                               setNewTeacherAvailability([...newTeacherAvailability, slotId]);
                                             }
                                           }}
-                                          className={`h-6 rounded-md border-2 transition-all flex items-center justify-center ${
+                                          className={`h-7 rounded-md border-2 transition-all flex items-center justify-center ${
                                             isSelected 
                                               ? "bg-[#657c36] border-[#657c36] text-white" 
                                               : "bg-white border-slate-200 hover:border-slate-300"
@@ -1554,15 +1557,18 @@ export default function ScheduleGenerator() {
                             {/* Tarde */}
                             <div>
                               <h4 className="text-[9px] font-black text-orange-600 uppercase tracking-wider mb-2 border-b border-orange-100 pb-1">Período da Tarde</h4>
-                              <div className="grid grid-cols-7 gap-1">
+                              <div className="grid grid-cols-6 gap-1">
                                 <div className="col-span-1"></div>
-                                {[1,2,3,4,5,6].map(p => (
-                                  <div key={p} className="text-[8px] font-black text-slate-400 text-center">{p}ª</div>
-                                ))}
                                 {DAYS.map(day => (
-                                  <React.Fragment key={day.id}>
-                                    <div className="text-[9px] font-black text-slate-500 flex items-center capitalize h-6">{day.id}</div>
-                                    {[7,8,9,10,11,12].map(p => {
+                                  <div key={day.id} className="text-[10px] font-black text-slate-400 text-center uppercase tracking-tighter">{day.id}</div>
+                                ))}
+                                
+                                {[7,8,9,10,11,12].map((p, idx) => (
+                                  <React.Fragment key={p}>
+                                    <div className="text-[10px] font-black text-slate-500 flex items-center justify-center p-0.5 h-7">
+                                      {idx + 1}ª
+                                    </div>
+                                    {DAYS.map(day => {
                                       const slotId = `${day.id}-${p}`;
                                       const isSelected = newTeacherAvailability.includes(slotId);
                                       return (
@@ -1576,12 +1582,12 @@ export default function ScheduleGenerator() {
                                               setNewTeacherAvailability([...newTeacherAvailability, slotId]);
                                             }
                                           }}
-                                          className={`h-6 rounded-md border-2 transition-all flex items-center justify-center ${
+                                          className={`h-7 rounded-md border-2 transition-all flex items-center justify-center ${
                                             isSelected 
                                               ? "bg-orange-500 border-orange-500 text-white" 
                                               : "bg-white border-slate-200 hover:border-slate-300"
                                           }`}
-                                          title={`${day.label} - ${p-6}ª Aula Tarde`}
+                                          title={`${day.label} - ${idx + 1}ª Aula Tarde`}
                                         >
                                           {isSelected && <CheckCircle2 className="w-3 h-3" />}
                                         </button>
