@@ -92,6 +92,7 @@ export default function ScheduleGenerator() {
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   const [isAddingTurma, setIsAddingTurma] = useState(false);
   const [isPrintingTurmaSelection, setIsPrintingTurmaSelection] = useState(false);
+  const [isClearingSelection, setIsClearingSelection] = useState(false);
   const [newTurmaName, setNewTurmaName] = useState('');
   const [newTurmaShift, setNewTurmaShift] = useState<'manha' | 'tarde'>('manha');
   const [editingTurmaId, setEditingTurmaId] = useState<string | null>(null);
@@ -503,7 +504,7 @@ export default function ScheduleGenerator() {
             ${logoUrl ? `<img src="${logoUrl}" style="height: 50px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
             <div style="text-align: left;">
               <h1 style="font-size: 11pt; margin: 0; font-weight: 800; line-height: 1.2;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
-              <h2 style="font-size: 9pt; margin: 2px 0; color: #1e293b; font-weight: 700;">HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift.toUpperCase()})</h2>
+              <h2 style="font-size: 9pt; margin: 2px 0; color: #1e293b; font-weight: 700;">HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift === 'manha' ? 'MANHÃ' : 'TARDE'})</h2>
             </div>
           </div>
         </div>
@@ -686,8 +687,15 @@ export default function ScheduleGenerator() {
             </button>
           </div>
 
-          {/* Backup Management */}
           <div className="flex bg-slate-100 p-0.5 rounded-lg mr-1 items-center">
+            <button 
+              onClick={() => setIsClearingSelection(true)}
+              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-amber-600 hover:bg-amber-100/50 transition-all border border-transparent flex items-center gap-1.5"
+              title="Limpar horários (Turma específica ou Todos)"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Limpar Grade
+            </button>
             <button 
               onClick={handleExportData}
               className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-blue-600 hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100 flex items-center gap-1.5"
@@ -709,35 +717,6 @@ export default function ScheduleGenerator() {
                 onChange={handleImportBackup} 
               />
             </label>
-          </div>
-
-          <div className="flex bg-slate-100 p-0.5 rounded-lg mr-1">
-            <button 
-              onClick={() => {
-                if (selectedTurmaId && confirm(`Limpar apenas o horário da turma ${currentTurma?.name}?`)) {
-                  const updatedSchedules = { ...schedules };
-                  delete updatedSchedules[selectedTurmaId];
-                  setSchedules(updatedSchedules);
-                  incrementVersion();
-                }
-              }}
-              className="px-2 py-1.5 rounded text-[10px] font-black uppercase text-amber-600 hover:bg-amber-50 transition-all"
-              title="Limpar Grade da turma atual"
-            >
-              Limpar Turma
-            </button>
-            <button 
-              onClick={() => {
-                if (confirm('Limpar o horário de TODAS as turmas? (Professores e Matérias serão mantidos)')) {
-                  setSchedules({});
-                  incrementVersion();
-                }
-              }}
-              className="px-2 py-1.5 rounded text-[10px] font-black uppercase text-orange-600 hover:bg-orange-50 transition-all"
-              title="Limpar todos os horários"
-            >
-              Limpar Todos
-            </button>
           </div>
 
             <button 
@@ -1264,7 +1243,7 @@ export default function ScheduleGenerator() {
               <div className="text-center">
                 <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Editar Aula</h3>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">
-                  {DAYS.find(d => d.id === selectedSlot.split('-')[0])?.label} • {getDisplayPeriod(parseInt(selectedSlot.split('-')[1]))}ª Aula • {getShift(parseInt(selectedSlot.split('-')[1])).toUpperCase()}
+                  {DAYS.find(d => d.id === selectedSlot.split('-')[0])?.label} • {getDisplayPeriod(parseInt(selectedSlot.split('-')[1]))}ª Aula • {getShift(parseInt(selectedSlot.split('-')[1])) === 'manha' ? 'MANHÃ' : 'TARDE'}
                 </p>
               </div>
 
@@ -1441,11 +1420,88 @@ export default function ScheduleGenerator() {
                   >
                     <div className="flex flex-col text-left">
                       <span className="text-sm font-black text-slate-800">{turma.name}</span>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift || 'Período indefinido'}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift === 'manha' ? 'MANHÃ' : turma.shift === 'tarde' ? 'TARDE' : 'Período indefinido'}</span>
                     </div>
                     <Printer className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
                   </button>
                 ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Clear Schedules Selection Modal */}
+      <AnimatePresence>
+        {isClearingSelection && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl space-y-6"
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex flex-col">
+                  <h3 className="text-xl font-black text-slate-900 uppercase">
+                    Limpar Grade de Horários
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1 text-left">Escolha o que deseja apagar</p>
+                </div>
+                <button 
+                  onClick={() => setIsClearingSelection(false)} 
+                  className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto px-1 custom-scrollbar">
+                <button 
+                  onClick={() => {
+                    if (confirm('ATENÇÃO: Isso irá apagar os horários de TODAS as turmas sem afetar professores ou disciplinas. Deseja realmente limpar tudo?')) {
+                      setSchedules({});
+                      incrementVersion();
+                      setIsClearingSelection(false);
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center p-6 bg-orange-50 text-orange-600 rounded-2xl hover:bg-orange-100 transition-all group border-2 border-orange-200/50"
+                >
+                  <Trash2 className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform" />
+                  <span className="text-xs font-black uppercase tracking-wider">Limpar Tudo</span>
+                  <span className="text-[9px] font-bold text-orange-400 mt-1 uppercase">(Apaga todos os horários de todas as turmas)</span>
+                </button>
+                
+                <div className="relative h-6 flex items-center justify-center my-2">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+                  <span className="relative px-3 bg-white text-[9px] font-bold text-slate-300 uppercase tracking-[0.3em]">Ou selecione uma turma</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pb-2">
+                  {turmas.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(turma => (
+                    <button 
+                      key={turma.id}
+                      onClick={() => {
+                        if (confirm(`Limpar todos os horários da turma ${turma.name}?`)) {
+                          setSchedules(prev => {
+                            const next = { ...prev };
+                            delete next[turma.id];
+                            return next;
+                          });
+                          incrementVersion();
+                          setIsClearingSelection(false);
+                        }
+                      }}
+                      className="flex items-center justify-between p-4 bg-white border-2 border-slate-100 rounded-2xl hover:border-amber-400 hover:bg-amber-50 transition-all group"
+                    >
+                      <div className="flex flex-col text-left">
+                        <span className="text-sm font-black text-slate-800">{turma.name}</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift === 'manha' ? 'MANHÃ' : turma.shift === 'tarde' ? 'TARDE' : 'Período indefinido'}</span>
+                      </div>
+                      <Trash2 className="w-4 h-4 text-slate-300 group-hover:text-amber-500 transition-colors" />
+                    </button>
+                  ))}
+                </div>
               </div>
             </motion.div>
           </div>
@@ -1510,7 +1566,7 @@ export default function ScheduleGenerator() {
                     <div key={turma.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
                       <div className="flex flex-col">
                         <span className="text-xs font-black text-slate-800">{turma.name}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift || 'Período não definido'}</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift === 'manha' ? 'MANHÃ' : turma.shift === 'tarde' ? 'TARDE' : 'Período não definido'}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <button 
