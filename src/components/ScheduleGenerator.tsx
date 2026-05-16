@@ -17,7 +17,6 @@ import {
   Pencil
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { extractScheduleFromImage } from '../services/geminiService';
 
 interface Teacher {
   id: string;
@@ -81,7 +80,7 @@ export default function ScheduleGenerator() {
   const [editingTeacherId, setEditingTeacherId] = useState<string | null>(null);
 
   const [isSaved, setIsSaved] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
+
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   const [isAddingTurma, setIsAddingTurma] = useState(false);
@@ -195,6 +194,71 @@ export default function ScheduleGenerator() {
     localStorage.setItem('cecm_schedules', JSON.stringify(schedules));
     localStorage.setItem('cecm_version', version.toString());
   }, [teachers, subjects, turmas, schedules, version]);
+
+  // Backup functions
+  const handleExportData = () => {
+    const data = {
+      teachers,
+      subjects,
+      turmas,
+      schedules,
+      version,
+      exportDate: new Date().toISOString(),
+      appName: "CECM-Scheduler"
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    link.download = `backup_horarios_${dateStr}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+        
+        // Basic validation
+        if (data.teachers && data.subjects && data.turmas) {
+          if (confirm('ATENÇÃO: A importação de backup irá substituir TODOS os dados atuais (professores, matérias e horários). Deseja continuar?')) {
+            setTeachers(data.teachers);
+            setSubjects(data.subjects);
+            setTurmas(data.turmas);
+            setSchedules(data.schedules || {});
+            setVersion(data.version || 1);
+            
+            if (data.turmas && data.turmas.length > 0) {
+              setSelectedTurmaId(data.turmas[0].id);
+              if (data.turmas[0].shift && (data.turmas[0].shift === 'manha' || data.turmas[0].shift === 'tarde')) {
+                setImportShift(data.turmas[0].shift);
+              }
+            }
+            
+            alert('Backup restaurado com sucesso!');
+          }
+        } else {
+          alert('Arquivo de backup inválido ou corrompido.');
+        }
+      } catch (err) {
+        alert('Erro ao ler o arquivo. Certifique-se de selecionar o arquivo .txt de backup correto.');
+        console.error(err);
+      }
+    };
+    reader.readAsText(file);
+    // Reset input
+    event.target.value = '';
+  };
 
   const incrementVersion = () => setVersion(v => v + 1);
 
@@ -497,192 +561,6 @@ export default function ScheduleGenerator() {
     setIsPrintingTurmaSelection(false);
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsImporting(true);
-    try {
-      const reader = new FileReader();
-      const fileType = file.type;
-      
-      reader.onload = async (e) => {
-        try {
-          const base64Data = e.target?.result?.toString().split(',')[1];
-          if (!base64Data) return;
-
-          const data = await extractScheduleFromImage(base64Data, fileType);
-          console.log("Raw Extracted Data:", data);
-          if (!data || !Array.isArray(data.turmas)) {
-            throw new Error("Formato de dados inválido recebido da IA.");
-          }
-
-          const normalize = (str: string) => str ? str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() : "";
-
-          // Merge subjects first (needed for teacher links)
-          const updatedSubjects = [...subjects];
-          if (Array.isArray(data.subjects)) {
-            data.subjects.forEach(newSubject => {
-              if (!newSubject.name) return;
-              const normalizedNew = normalize(newSubject.name);
-              if (!updatedSubjects.find(s => normalize(s.name) === normalizedNew || (normalizedNew.length > 3 && normalizedNew.includes(normalize(s.name))) || (normalize(s.name).length > 3 && normalize(s.name).includes(normalizedNew)))) {
-                updatedSubjects.push({ 
-                  id: generateId(), 
-                  name: newSubject.name, 
-                  workload: newSubject.workload || 2
-                });
-              }
-            });
-          }
-
-          // Merge teachers and link subjects
-          const updatedTeachers = [...teachers];
-          if (Array.isArray(data.teachers)) {
-            data.teachers.forEach(newTeacher => {
-              if (!newTeacher.name) return;
-              const normalizedNewName = normalize(newTeacher.name);
-              const existingTeacher = updatedTeachers.find(t => normalize(t.name) === normalizedNewName || (normalizedNewName.length > 5 && normalizedNewName.includes(normalize(t.name))));
-              
-              const linkedSubject = newTeacher.subject 
-                ? updatedSubjects.find(s => normalize(newTeacher.subject!).includes(normalize(s.name)) || normalize(s.name).includes(normalize(newTeacher.subject!)))
-                : null;
-
-              if (!existingTeacher) {
-                updatedTeachers.push({ 
-                  id: generateId(), 
-                  name: newTeacher.name,
-                  subjectIds: linkedSubject ? [linkedSubject.id] : [] 
-                });
-              } else if (linkedSubject && !existingTeacher.subjectIds.includes(linkedSubject.id)) {
-                existingTeacher.subjectIds.push(linkedSubject.id);
-              }
-            });
-          }
-
-          // Merge turmas and schedules
-          const updatedTurmas = [...turmas];
-          const updatedSchedules = { ...schedules };
-
-          data.turmas.forEach(newTurma => {
-            if (!newTurma || !newTurma.name || !newTurma.schedule) return;
-            const normalizedTurmaName = normalize(newTurma.name);
-            
-            // FILTRAGEM DE LIXO MAIS RADICAL - Apenas nomes muito longos ou puramente numéricos sem sentido
-            const lettersCount = (newTurma.name.match(/[A-Za-z]/g) || []).length;
-            const numbersCount = (newTurma.name.match(/\d/g) || []).length;
-            
-            // Se for só número e tiver mais de 3 dígitos (provavelmente ID de aluno)
-            if (numbersCount > 2 && lettersCount === 0) return;
-            
-            const isGenericHeader = normalizedTurmaName.includes('carga horaria') || 
-                                   normalizedTurmaName.includes('total') || 
-                                   normalizedTurmaName.includes('professor') || 
-                                   normalizedTurmaName.includes('horario') ||
-                                   normalizedTurmaName.includes('obs') ||
-                                   normalizedTurmaName.includes('escola');
-
-            if (newTurma.name.length > 25 || isGenericHeader || !newTurma.name.trim()) {
-              return;
-            }
-
-            // Busca mais precisa - evita que "1A" dê match em "1B"
-            let turma = updatedTurmas.find(t => normalize(t.name) === normalizedTurmaName);
-            
-            // Se não achou exato, tenta um match parcial mas seguro
-            if (!turma) {
-                turma = updatedTurmas.find(t => {
-                    const normT = normalize(t.name);
-                    return (normT.length > 1 && (normalizedTurmaName === normT || normalizedTurmaName.startsWith(normT) || normT.startsWith(normalizedTurmaName)));
-                });
-            }
-            
-            if (!turma) {
-              turma = { id: generateId(), name: newTurma.name, shift: importShift as any };
-              updatedTurmas.push(turma);
-            } else if (!turma.shift) {
-              turma.shift = importShift as any;
-            }
-
-            const scheduleForTurma: Schedule = {};
-            Object.entries(newTurma.schedule).forEach(([extractedSlotId, slotData]: [string, any]) => {
-              if (!extractedSlotId || !extractedSlotId.includes('-')) return;
-              
-              const [dayId, periodStr] = extractedSlotId.split('-');
-              let periodNum = parseInt(periodStr.replace(/\D/g, '')); // Remove non-numbers e.g. "1a" -> "1"
-              if (isNaN(periodNum)) return;
-              
-              const actualPeriod = importShift === 'tarde' ? periodNum + 6 : periodNum;
-              const slotId = `${dayId}-${actualPeriod}`;
-
-              if (!slotData || (!slotData.teacher && !slotData.subject)) return;
-
-              const normExtractedTeacher = normalize(slotData.teacher || "");
-              const normExtractedSubject = normalize(slotData.subject || "");
-
-              // Match Teacher - Try exact first
-              let teacher = updatedTeachers.find(t => normalize(t.name) === normExtractedTeacher);
-              if (!teacher) {
-                  // Try partial
-                  teacher = updatedTeachers.find(t => 
-                    (normExtractedTeacher.length > 4 && normExtractedTeacher.includes(normalize(t.name))) ||
-                    (normalize(t.name).length > 4 && normalize(t.name).includes(normExtractedTeacher))
-                  );
-              }
-               
-              // Match Subject - Try exact first
-              let subject = updatedSubjects.find(s => normalize(s.name) === normExtractedSubject);
-              if (!subject) {
-                  // Try partial
-                  subject = updatedSubjects.find(s => 
-                    (normExtractedSubject.length > 3 && normExtractedSubject.includes(normalize(s.name))) ||
-                    (normalize(s.name).length > 3 && normalize(s.name).includes(normExtractedSubject))
-                  );
-              }
-
-              if (teacher && !subject) {
-                subject = updatedSubjects.find(s => teacher!.subjectIds.includes(s.id));
-              }
-              if (subject && !teacher) {
-                teacher = updatedTeachers.find(t => t.subjectIds.includes(subject!.id));
-              }
-              
-              if (teacher && subject) {
-                scheduleForTurma[slotId] = { teacherId: teacher.id, subjectId: subject.id };
-              }
-            });
-            
-            if (Object.keys(scheduleForTurma).length > 0) {
-              updatedSchedules[turma.id] = { ...(updatedSchedules[turma.id] || {}), ...scheduleForTurma };
-            }
-          });
-
-          setSubjects(updatedSubjects);
-          setTeachers(updatedTeachers);
-          setTurmas(updatedTurmas);
-          setSchedules(updatedSchedules);
-          incrementVersion();
-
-          const totalAulas = Object.values(updatedSchedules).reduce((acc: number, curr: any) => acc + Object.keys(curr).length, 0);
-          
-          alert(`Importação concluída!\nTurmas: ${data.turmas.length}\nAulas extraídas: ${totalAulas}`);
-        } catch (err) {
-          console.error("Detailed processing error:", err);
-          alert(`Erro ao processar arquivo: ${err instanceof Error ? err.message : "Erro desconhecido"}`);
-        } finally {
-          setIsImporting(false);
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error("Failed to import schedule:", error);
-      alert("Falha ao importar o horário. Verifique o arquivo e tente novamente.");
-      setIsImporting(false);
-    } finally {
-      // Reset input
-      event.target.value = '';
-    }
-  };
-
   const currentTurma = turmas.find(t => t.id === selectedTurmaId);
 
   return (
@@ -739,6 +617,31 @@ export default function ScheduleGenerator() {
             </button>
           </div>
 
+          {/* Backup Management */}
+          <div className="flex bg-slate-100 p-1 rounded-xl mr-2">
+            <button 
+              onClick={handleExportData}
+              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-blue-600 hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100 flex items-center gap-1.5"
+              title="Baixar arquivo de backup (.txt)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Backup: Exp.
+            </button>
+            <label 
+              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-indigo-600 hover:bg-indigo-50 transition-all border border-transparent hover:border-indigo-100 flex items-center gap-1.5 cursor-pointer"
+              title="Carregar arquivo de backup (.txt)"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Backup: Imp.
+              <input 
+                type="file" 
+                accept=".txt" 
+                className="hidden" 
+                onChange={handleImportBackup} 
+              />
+            </label>
+          </div>
+
           <div className="flex bg-slate-100 p-1 rounded-xl mr-2">
             <button 
               onClick={() => {
@@ -789,19 +692,7 @@ export default function ScheduleGenerator() {
             </button>
           </div>
 
-          <label className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-sm hover:shadow-md active:scale-[0.98] min-w-[110px] ${
-            isImporting ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}>
-            {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {isImporting ? 'Importando...' : 'Importar Horário'}
-            <input 
-              type="file" 
-              accept="application/pdf,image/*" 
-              className="hidden" 
-              onChange={handleFileUpload}
-              disabled={isImporting}
-            />
-          </label>
+
           <button 
             onClick={handleSave}
             className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[110px] ${
@@ -1429,13 +1320,14 @@ export default function ScheduleGenerator() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-2">
                   <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      value={newTurmaName}
-                      onChange={e => setNewTurmaName(e.target.value)}
-                      placeholder="Nome da Turma (Ex: 6ºA)"
-                      className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
-                    />
+                      <input 
+                        type="text" 
+                        value={newTurmaName}
+                        onChange={e => setNewTurmaName(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addTurma()}
+                        placeholder="Nome da Turma (Ex: 6ºA)"
+                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
+                      />
                     <button onClick={addTurma} className={`px-6 rounded-xl transition-all ${editingTurmaId ? 'bg-[#657c36] text-white' : 'bg-slate-900 text-white hover:bg-black'}`}>
                       {editingTurmaId ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                     </button>
@@ -1530,6 +1422,7 @@ export default function ScheduleGenerator() {
                         type="text" 
                         value={newTeacherName}
                         onChange={e => setNewTeacherName(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addTeacher()}
                         placeholder="Nome do Professor"
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
                       />
@@ -1637,6 +1530,7 @@ export default function ScheduleGenerator() {
                     type="text" 
                     value={newSubjectName}
                     onChange={e => setNewSubjectName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addSubject()}
                     placeholder="Nome da Disciplina (Ex: Matemática)"
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
                   />
@@ -1648,6 +1542,7 @@ export default function ScheduleGenerator() {
                       max="10"
                       value={newSubjectWorkload}
                       onChange={e => setNewSubjectWorkload(parseInt(e.target.value) || 1)}
+                      onKeyDown={e => e.key === 'Enter' && addSubject()}
                       className="w-12 bg-transparent text-sm font-black text-slate-900 text-center focus:outline-none"
                     />
                     <button onClick={addSubject} className={`px-4 py-2 rounded-lg transition-all ${editingSubjectId ? 'bg-[#657c36] text-white' : 'bg-slate-900 text-white hover:bg-black'}`}>
