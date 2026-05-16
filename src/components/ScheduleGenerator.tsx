@@ -14,7 +14,9 @@ import {
   Loader2,
   Upload,
   AlertCircle,
-  Pencil
+  Pencil,
+  Image as ImageIcon,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -65,6 +67,9 @@ export default function ScheduleGenerator() {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [schedules, setSchedules] = useState<AllSchedules>({});
   const [version, setVersion] = useState<number>(10);
+  const [logoUrl, setLogoUrl] = useState<string>('');
+  const [showLogoInput, setShowLogoInput] = useState(false);
+  const [tempLogoUrl, setTempLogoUrl] = useState('');
   
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [importShift, setImportShift] = useState<'manha' | 'tarde'>('manha');
@@ -203,7 +208,8 @@ export default function ScheduleGenerator() {
     localStorage.setItem('cecm_turmas', JSON.stringify(turmas));
     localStorage.setItem('cecm_schedules', JSON.stringify(schedules));
     localStorage.setItem('cecm_version', version.toString());
-  }, [teachers, subjects, turmas, schedules, version]);
+    localStorage.setItem('cecm_logo_url', logoUrl);
+  }, [teachers, subjects, turmas, schedules, version, logoUrl]);
 
   // Backup functions
   const handleExportData = () => {
@@ -213,6 +219,7 @@ export default function ScheduleGenerator() {
       turmas,
       schedules,
       version,
+      logoUrl,
       exportDate: new Date().toISOString(),
       appName: "CECM-Scheduler"
     };
@@ -252,6 +259,7 @@ export default function ScheduleGenerator() {
             setSubjects(data.subjects || []);
             setTurmas(data.turmas || []);
             setSchedules(data.schedules || {});
+            setLogoUrl(data.logoUrl || '');
             setVersion(prev => (data.version || prev) + 1);
             
             if (data.turmas && data.turmas.length > 0) {
@@ -290,6 +298,7 @@ export default function ScheduleGenerator() {
     localStorage.setItem('cecm_subjects', JSON.stringify(subjects));
     localStorage.setItem('cecm_turmas', JSON.stringify(turmas));
     localStorage.setItem('cecm_schedules', JSON.stringify(schedules));
+    localStorage.setItem('cecm_logo_url', logoUrl);
     
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
@@ -490,8 +499,13 @@ export default function ScheduleGenerator() {
     const html = `
       <div class="print-container">
         <div class="print-header">
-          <h1>COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
-          <h2>HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift.toUpperCase()})</h2>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 5px;">
+            ${logoUrl ? `<img src="${logoUrl}" style="height: 50px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
+            <div style="text-align: left;">
+              <h1 style="font-size: 11pt; margin: 0; font-weight: 800; line-height: 1.2;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
+              <h2 style="font-size: 9pt; margin: 2px 0; color: #1e293b; font-weight: 700;">HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift.toUpperCase()})</h2>
+            </div>
+          </div>
         </div>
         
         <div class="table-wrapper">
@@ -665,7 +679,67 @@ export default function ScheduleGenerator() {
           </div>
 
           {/* Backup Management */}
-          <div className="flex bg-slate-100 p-1 rounded-xl mr-2">
+          <div className="flex bg-slate-100 p-1 rounded-xl mr-2 items-center">
+            {showLogoInput ? (
+              <div className="flex items-center gap-1 bg-white rounded-lg px-2 py-0.5 border border-slate-200 shadow-sm animate-in slide-in-from-right-1 duration-200">
+                <input 
+                  type="text"
+                  value={tempLogoUrl}
+                  onChange={(e) => setTempLogoUrl(e.target.value)}
+                  placeholder="URL da Logo..."
+                  className="w-32 text-[10px] font-bold focus:outline-none bg-transparent"
+                  autoFocus
+                  onBlur={() => {
+                    // Only close if it hasn't changed or if user clicked away
+                    if (tempLogoUrl === logoUrl) setShowLogoInput(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setLogoUrl(tempLogoUrl);
+                      setShowLogoInput(false);
+                    }
+                    if (e.key === 'Escape') {
+                      setTempLogoUrl(logoUrl);
+                      setShowLogoInput(false);
+                    }
+                  }}
+                />
+                <button 
+                  onClick={() => {
+                    setLogoUrl(tempLogoUrl);
+                    setShowLogoInput(false);
+                  }}
+                  className="p-1 hover:bg-slate-100 rounded text-[#657c36]"
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                </button>
+                <button 
+                  onClick={() => {
+                    setTempLogoUrl(logoUrl);
+                    setShowLogoInput(false);
+                  }}
+                  className="p-1 hover:bg-slate-100 rounded text-slate-400"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => {
+                  setTempLogoUrl(logoUrl);
+                  setShowLogoInput(true);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${
+                  logoUrl 
+                    ? "text-[#657c36] hover:bg-[#657c36]/10" 
+                    : "text-slate-500 hover:bg-slate-200"
+                }`}
+                title="Configurar logotipo da escola"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                Logo: {logoUrl ? 'Alt.' : 'Add'}
+              </button>
+            )}
             <button 
               onClick={handleExportData}
               className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-blue-600 hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100 flex items-center gap-1.5"
@@ -754,8 +828,13 @@ export default function ScheduleGenerator() {
                 return `
                   <div class="print-container">
                     <div class="print-header">
-                      <h1>COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
-                      <h2>HORÁRIO DA ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
+                      <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 2px;">
+                        ${logoUrl ? `<img src="${logoUrl}" style="height: 40px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
+                        <div style="text-align: left;">
+                          <h1 style="font-size: 9pt; margin: 0; font-weight: 800;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
+                          <h2 style="font-size: 8pt; margin: 0; font-weight: 700; color: #1e293b;">HORÁRIO DA ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
+                        </div>
+                      </div>
                     </div>
                     
                     <div class="table-wrapper">
@@ -976,11 +1055,18 @@ export default function ScheduleGenerator() {
         {/* Professional Matrix View (Matching Screenshot) */}
         <div className="flex-1 flex flex-col bg-white rounded-xl border-2 border-slate-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] overflow-hidden print:overflow-visible print:shadow-none print:border-slate-800" id="schedule-grid">
             <div className="p-3 border-b-2 border-slate-900 bg-slate-50 flex items-center justify-between sticky top-0 left-0 z-30 print:static print:border-b">
-              <div className="flex flex-col">
-                <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
-                  Horário {importShift === 'manha' ? 'da Manhã' : 'da Tarde'}
-                </h1>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mt-1">CECM Gregório Szeremeta</p>
+              <div className="flex items-center gap-3">
+                {logoUrl && (
+                  <div className="w-12 h-12 flex-shrink-0 bg-white border border-slate-200 rounded-lg p-1 overflow-hidden flex items-center justify-center">
+                    <img src={logoUrl} alt="Logo Escola" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                  </div>
+                )}
+                <div className="flex flex-col">
+                  <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
+                    Horário {importShift === 'manha' ? 'da Manhã' : 'da Tarde'}
+                  </h1>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mt-1">CECM Gregório Szeremeta</p>
+                </div>
               </div>
               <div className="flex items-center gap-4">
                 <div className="hidden sm:flex items-center gap-2">
