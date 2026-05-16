@@ -627,43 +627,45 @@ export default function ScheduleGenerator() {
   return (
     <div className="flex-1 flex flex-col space-y-3 animate-in fade-in duration-700 pb-2 overflow-hidden">
       {/* Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-2 px-4 bg-white rounded-2xl border border-slate-200 shadow-sm print:hidden">
-        <div className="flex items-center gap-4">
-          <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest pl-2">
-            Gestão de Horários
-          </h2>
-          <div className="px-2 py-1 bg-slate-100 rounded-md text-[9px] font-black text-slate-500 uppercase tracking-tighter">
-            Versão {version}
+      <div className="p-3 px-4 bg-white rounded-2xl border border-slate-200 shadow-sm print:hidden flex flex-col gap-2">
+        {/* Row 1: Management & Save */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest pl-1">
+              Gestão de Horários
+            </h2>
+            <div className="px-2 py-1 bg-slate-100 rounded-md text-[9px] font-black text-slate-500 uppercase tracking-tighter">
+              Versão {version}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Management Toggles */}
-          <div className="flex border-r border-slate-100 pr-4 mr-2 gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Management Toggles */}
+            <div className="flex border-r border-slate-100 pr-2 mr-1 gap-1">
             <button 
               onClick={() => setIsAddingTurma(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-xs font-bold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-[10px] font-bold transition-all"
             >
-              <Calendar className="w-4 h-4" />
+              <Calendar className="w-3.5 h-3.5" />
               Turmas
             </button>
             <button 
               onClick={() => setIsAddingSubject(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-xs font-bold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-[10px] font-bold transition-all"
             >
-              <BookOpen className="w-4 h-4" />
+              <BookOpen className="w-3.5 h-3.5" />
               Disciplinas
             </button>
             <button 
               onClick={() => setIsAddingTeacher(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-xs font-bold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-[10px] font-bold transition-all"
             >
-              <Users className="w-4 h-4" />
+              <Users className="w-3.5 h-3.5" />
               Professores
             </button>
           </div>
 
           {/* Shift Selector */}
-          <div className="flex bg-slate-100 p-1 rounded-xl mr-2">
+          <div className="flex bg-slate-100 p-0.5 rounded-lg mr-1">
             <button 
               onClick={() => setImportShift('manha')}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${importShift === 'manha' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}
@@ -679,7 +681,7 @@ export default function ScheduleGenerator() {
           </div>
 
           {/* Backup Management */}
-          <div className="flex bg-slate-100 p-1 rounded-xl mr-2 items-center">
+          <div className="flex bg-slate-100 p-0.5 rounded-lg mr-1 items-center">
             {showLogoInput ? (
               <div className="flex items-center gap-1 bg-white rounded-lg px-2 py-0.5 border border-slate-200 shadow-sm animate-in slide-in-from-right-1 duration-200">
                 <input 
@@ -763,7 +765,7 @@ export default function ScheduleGenerator() {
             </label>
           </div>
 
-          <div className="flex bg-slate-100 p-1 rounded-xl mr-2">
+          <div className="flex bg-slate-100 p-0.5 rounded-lg mr-1">
             <button 
               onClick={() => {
                 if (selectedTurmaId && confirm(`Limpar apenas o horário da turma ${currentTurma?.name}?`)) {
@@ -773,7 +775,7 @@ export default function ScheduleGenerator() {
                   incrementVersion();
                 }
               }}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-amber-600 hover:bg-amber-50 transition-all border border-transparent hover:border-amber-100"
+              className="px-2 py-1.5 rounded text-[10px] font-black uppercase text-amber-600 hover:bg-amber-50 transition-all"
               title="Limpar Grade da turma atual"
             >
               Limpar Turma
@@ -785,27 +787,30 @@ export default function ScheduleGenerator() {
                   incrementVersion();
                 }
               }}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-orange-600 hover:bg-orange-50 transition-all border border-transparent hover:border-orange-100"
+              className="px-2 py-1.5 rounded text-[10px] font-black uppercase text-orange-600 hover:bg-orange-50 transition-all"
               title="Limpar todos os horários"
             >
               Limpar Todos
             </button>
-
           </div>
 
+            <button 
+              onClick={handleSave}
+              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[90px] ${
+                isSaved ? 'bg-green-500 text-white' : 'bg-slate-900 text-white hover:bg-black'
+              }`}
+            >
+              {isSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              {isSaved ? 'Salvo!' : 'Salvar'}
+            </button>
+          </div>
+        </div>
 
-          <button 
-            onClick={handleSave}
-            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[110px] ${
-              isSaved ? 'bg-green-500 text-white' : 'bg-slate-900 text-white hover:bg-black'
-            }`}
-          >
-            {isSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            {isSaved ? 'Salvo!' : 'Salvar'}
-          </button>
+        {/* Row 2: Print Actions */}
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100/50">
           <button 
             onClick={() => setIsPrintingTurmaSelection(true)}
-            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[110px]"
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[100px]"
           >
             <Printer className="w-4 h-4" />
             Imprimir Turma
@@ -1042,10 +1047,10 @@ export default function ScheduleGenerator() {
                 printWindow.document.close();
               }
             }}
-            className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[110px]"
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[100px]"
           >
             <Printer className="w-4 h-4" />
-            Imprimir Quadro
+            Quadro Geral
           </button>
         </div>
       </div>
@@ -1449,7 +1454,7 @@ export default function ScheduleGenerator() {
                       <input 
                         type="text" 
                         value={newTurmaName}
-                        onChange={e => setNewTurmaName(e.target.value)}
+                        onChange={e => setNewTurmaName(e.target.value.toUpperCase())}
                         onKeyDown={e => e.key === 'Enter' && addTurma()}
                         placeholder="Nome da Turma (Ex: 6ºA)"
                         className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
