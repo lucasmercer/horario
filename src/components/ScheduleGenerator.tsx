@@ -611,7 +611,7 @@ export default function ScheduleGenerator() {
   const currentTurma = turmas.find(t => t.id === selectedTurmaId);
 
   return (
-    <div className="space-y-3 animate-in fade-in duration-700 pb-4">
+    <div className="flex-1 flex flex-col space-y-3 animate-in fade-in duration-700 pb-2 overflow-hidden">
       {/* Action Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-2 px-4 bg-white rounded-2xl border border-slate-200 shadow-sm print:hidden">
         <div className="flex items-center gap-4">
@@ -972,9 +972,9 @@ export default function ScheduleGenerator() {
       </div>
 
       {/* Main Content (Shifted up) */}
-      <div className="w-full">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Professional Matrix View (Matching Screenshot) */}
-        <div className="bg-white rounded-xl border-2 border-slate-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] overflow-hidden print:overflow-visible print:shadow-none print:border-slate-800" id="schedule-grid">
+        <div className="flex-1 flex flex-col bg-white rounded-xl border-2 border-slate-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] overflow-hidden print:overflow-visible print:shadow-none print:border-slate-800" id="schedule-grid">
             <div className="p-3 border-b-2 border-slate-900 bg-slate-50 flex items-center justify-between sticky top-0 left-0 z-30 print:static print:border-b">
               <div className="flex flex-col">
                 <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
@@ -994,7 +994,7 @@ export default function ScheduleGenerator() {
               </div>
             </div>
             
-            <div className="overflow-auto max-h-[75vh] custom-scrollbar">
+            <div className="flex-1 overflow-auto custom-scrollbar">
               <table className="w-full border-collapse border-spacing-0 min-w-max">
                 <thead>
                   <tr className="bg-slate-100 border-b-2 border-slate-900 sticky top-0 z-20">
