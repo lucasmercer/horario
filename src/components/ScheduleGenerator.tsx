@@ -550,8 +550,14 @@ export default function ScheduleGenerator() {
           </table>
         </div>
         
-        <div class="print-footer">
-          Sistema feito por: Prof. Lucas Mercer Leniar - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+        <div class="print-footer" style="display: flex; flex-direction: column; align-items: center; gap: 0px; margin-top: 5px;">
+          <div style="font-weight: 800; font-size: 7.5pt; color: #0f172a;">
+            Sistema feito por: Prof. Lucas Mercer Leniar
+            <span style="font-size: 6pt; color: #64748b; font-weight: normal; margin-left: 8px;">
+              - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          <div style="font-size: 5.5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px;">www.LucasLeniar.com.br</div>
         </div>
       </div>
     `;
@@ -682,66 +688,6 @@ export default function ScheduleGenerator() {
 
           {/* Backup Management */}
           <div className="flex bg-slate-100 p-0.5 rounded-lg mr-1 items-center">
-            {showLogoInput ? (
-              <div className="flex items-center gap-1 bg-white rounded-lg px-2 py-0.5 border border-slate-200 shadow-sm animate-in slide-in-from-right-1 duration-200">
-                <input 
-                  type="text"
-                  value={tempLogoUrl}
-                  onChange={(e) => setTempLogoUrl(e.target.value)}
-                  placeholder="URL da Logo..."
-                  className="w-32 text-[10px] font-bold focus:outline-none bg-transparent"
-                  autoFocus
-                  onBlur={() => {
-                    // Only close if it hasn't changed or if user clicked away
-                    if (tempLogoUrl === logoUrl) setShowLogoInput(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setLogoUrl(tempLogoUrl);
-                      setShowLogoInput(false);
-                    }
-                    if (e.key === 'Escape') {
-                      setTempLogoUrl(logoUrl);
-                      setShowLogoInput(false);
-                    }
-                  }}
-                />
-                <button 
-                  onClick={() => {
-                    setLogoUrl(tempLogoUrl);
-                    setShowLogoInput(false);
-                  }}
-                  className="p-1 hover:bg-slate-100 rounded text-[#657c36]"
-                >
-                  <CheckCircle2 className="w-3 h-3" />
-                </button>
-                <button 
-                  onClick={() => {
-                    setTempLogoUrl(logoUrl);
-                    setShowLogoInput(false);
-                  }}
-                  className="p-1 hover:bg-slate-100 rounded text-slate-400"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ) : (
-              <button 
-                onClick={() => {
-                  setTempLogoUrl(logoUrl);
-                  setShowLogoInput(true);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${
-                  logoUrl 
-                    ? "text-[#657c36] hover:bg-[#657c36]/10" 
-                    : "text-slate-500 hover:bg-slate-200"
-                }`}
-                title="Configurar logotipo da escola"
-              >
-                <ImageIcon className="w-3.5 h-3.5" />
-                Logo: {logoUrl ? 'Alt.' : 'Add'}
-              </button>
-            )}
             <button 
               onClick={handleExportData}
               className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-blue-600 hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100 flex items-center gap-1.5"
@@ -807,14 +753,78 @@ export default function ScheduleGenerator() {
         </div>
 
         {/* Row 2: Print Actions */}
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100/50">
-          <button 
-            onClick={() => setIsPrintingTurmaSelection(true)}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[100px]"
-          >
-            <Printer className="w-4 h-4" />
-            Imprimir Turma
-          </button>
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100/50">
+          {/* Logo Setting (Left Aligned) */}
+          <div className="flex items-center">
+            {showLogoInput ? (
+              <div className="flex items-center gap-1 bg-white rounded-lg px-2 py-0.5 border border-slate-200 shadow-sm animate-in slide-in-from-left-1 duration-200">
+                <input 
+                  type="text"
+                  value={tempLogoUrl}
+                  onChange={(e) => setTempLogoUrl(e.target.value)}
+                  placeholder="URL da Logo..."
+                  className="w-32 text-[10px] font-bold focus:outline-none bg-transparent"
+                  autoFocus
+                  onBlur={() => {
+                    if (tempLogoUrl === logoUrl) setShowLogoInput(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setLogoUrl(tempLogoUrl);
+                      setShowLogoInput(false);
+                    }
+                    if (e.key === 'Escape') {
+                      setTempLogoUrl(logoUrl);
+                      setShowLogoInput(false);
+                    }
+                  }}
+                />
+                <button 
+                  onClick={() => {
+                    setLogoUrl(tempLogoUrl);
+                    setShowLogoInput(false);
+                  }}
+                  className="p-1 hover:bg-slate-100 rounded text-[#657c36]"
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                </button>
+                <button 
+                  onClick={() => {
+                    setTempLogoUrl(logoUrl);
+                    setShowLogoInput(false);
+                  }}
+                  className="p-1 hover:bg-slate-100 rounded text-slate-400"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => {
+                  setTempLogoUrl(logoUrl);
+                  setShowLogoInput(true);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${
+                  logoUrl 
+                    ? "text-[#657c36] hover:bg-[#657c36]/10" 
+                    : "text-slate-500 hover:bg-slate-200"
+                }`}
+                title="Configurar logotipo da escola"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                Logo: {logoUrl ? 'Alt.' : 'Add'}
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setIsPrintingTurmaSelection(true)}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[100px]"
+            >
+              <Printer className="w-4 h-4" />
+              Imprimir Turma
+            </button>
           
           <button 
             onClick={() => {
@@ -892,8 +902,14 @@ export default function ScheduleGenerator() {
                       </table>
                     </div>
                     
-                    <div class="print-footer">
-                      Sistema feito por: Prof. Lucas Mercer Leniar - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    <div class="print-footer" style="display: flex; flex-direction: column; align-items: center; gap: 0px; margin-top: 5px;">
+                      <div style="font-weight: 800; font-size: 7.5pt; color: #0f172a;">
+                        Sistema feito por: Prof. Lucas Mercer Leniar
+                        <span style="font-size: 6pt; color: #64748b; font-weight: normal; margin-left: 8px;">
+                          - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div style="font-size: 5.5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px;">www.LucasLeniar.com.br</div>
                     </div>
                   </div>
                 `;
@@ -1054,6 +1070,7 @@ export default function ScheduleGenerator() {
           </button>
         </div>
       </div>
+    </div>
 
       {/* Main Content (Shifted up) */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -1208,10 +1225,23 @@ export default function ScheduleGenerator() {
                 </tbody>
               </table>
             </div>
-            <div className="p-3 bg-slate-50 border-t-2 border-slate-900 text-center">
-              <p className="text-[11px] font-black text-slate-900 uppercase tracking-[0.3em]">
-                Sistema feito por: Prof. Lucas Mercer Leniar - Versão {version} - {new Date().toLocaleDateString('pt-BR')} - Atualização de Grade
-              </p>
+            <div className="p-3 bg-slate-50 border-t-2 border-slate-900 text-center flex flex-col items-center gap-0.5">
+              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5">
+                <p className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] leading-none">
+                  Sistema feito por: Prof. Lucas Mercer Leniar
+                </p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                  Versão {version} - {new Date().toLocaleDateString('pt-BR')} - Atualização de Grade
+                </p>
+              </div>
+              <a 
+                href="https://www.LucasLeniar.com.br" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-[9px] font-black text-blue-600 hover:underline tracking-widest uppercase mt-0.5"
+              >
+                www.LucasLeniar.com.br
+              </a>
             </div>
           </div>
 

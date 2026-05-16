@@ -159,9 +159,17 @@ export default function App() {
             <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">
               Reserva - PR // Brasil
             </p>
-            <p className="text-[11px] font-bold text-slate-800">
+            <p className="text-[11px] font-bold text-slate-800 leading-none">
               Criado por Prof. Lucas Mercer Leniar
             </p>
+            <a 
+              href="https://www.LucasLeniar.com.br" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-[9px] font-black text-blue-600 hover:underline tracking-widest uppercase block"
+            >
+              www.LucasLeniar.com.br
+            </a>
           </div>
         </div>
       </div>
