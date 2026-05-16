@@ -296,7 +296,21 @@ export default function ScheduleGenerator() {
   };
 
   const addTeacher = () => {
-    if (!newTeacherName.trim()) return;
+    if (!newTeacherName.trim()) {
+      alert('Por favor, insira o nome do professor');
+      return;
+    }
+
+    // Validação de duplicidade de nome
+    const nameExists = teachers.some(t => 
+      t.name.trim().toLowerCase() === newTeacherName.trim().toLowerCase() && 
+      t.id !== editingTeacherId
+    );
+
+    if (nameExists) {
+      alert(`Erro: Já existe um professor cadastrado com o nome "${newTeacherName}". Use um nome diferente para evitar confusão.`);
+      return;
+    }
     
     if (editingTeacherId) {
       setTeachers(prev => prev.map(t => t.id === editingTeacherId 
@@ -597,9 +611,9 @@ export default function ScheduleGenerator() {
   const currentTurma = turmas.find(t => t.id === selectedTurmaId);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-700 pb-10">
+    <div className="space-y-3 animate-in fade-in duration-700 pb-4">
       {/* Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm print:hidden">
+      <div className="flex flex-wrap items-center justify-between gap-4 p-2 px-4 bg-white rounded-2xl border border-slate-200 shadow-sm print:hidden">
         <div className="flex items-center gap-4">
           <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest pl-2">
             Gestão de Horários
@@ -961,7 +975,7 @@ export default function ScheduleGenerator() {
       <div className="w-full">
         {/* Professional Matrix View (Matching Screenshot) */}
         <div className="bg-white rounded-xl border-2 border-slate-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)] overflow-hidden print:overflow-visible print:shadow-none print:border-slate-800" id="schedule-grid">
-            <div className="p-4 border-b-2 border-slate-900 bg-slate-50 flex items-center justify-between sticky top-0 left-0 z-30 print:static print:border-b">
+            <div className="p-3 border-b-2 border-slate-900 bg-slate-50 flex items-center justify-between sticky top-0 left-0 z-30 print:static print:border-b">
               <div className="flex flex-col">
                 <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
                   Horário {importShift === 'manha' ? 'da Manhã' : 'da Tarde'}
@@ -1446,14 +1460,26 @@ export default function ScheduleGenerator() {
                 ) : (
                   <>
                     <div className="grid grid-cols-1 gap-3">
-                      <input 
-                        type="text" 
-                        value={newTeacherName}
-                        onChange={e => setNewTeacherName(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && addTeacher()}
-                        placeholder="Nome do Professor"
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
-                      />
+                      <div className="space-y-1">
+                        <input 
+                          type="text" 
+                          value={newTeacherName}
+                          onChange={e => setNewTeacherName(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && addTeacher()}
+                          placeholder="Nome do Professor"
+                          className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm font-bold focus:outline-none transition-all ${
+                            teachers.some(t => t.name.trim().toLowerCase() === newTeacherName.trim().toLowerCase() && t.id !== editingTeacherId) && newTeacherName.trim() !== ""
+                              ? "border-red-500 ring-2 ring-red-50" 
+                              : "border-slate-200 focus:border-slate-900"
+                          }`}
+                        />
+                        {teachers.some(t => t.name.trim().toLowerCase() === newTeacherName.trim().toLowerCase() && t.id !== editingTeacherId) && newTeacherName.trim() !== "" && (
+                          <div className="flex items-center gap-1.5 px-2 py-1 bg-red-50 rounded-lg border border-red-100">
+                            <AlertCircle className="w-3 h-3 text-red-500" />
+                            <span className="text-[10px] font-black text-red-600 uppercase tracking-tight">Nome já cadastrado!</span>
+                          </div>
+                        )}
+                      </div>
                       
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Selecione as Disciplinas</label>
