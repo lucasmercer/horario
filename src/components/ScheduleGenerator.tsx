@@ -579,6 +579,13 @@ export default function ScheduleGenerator() {
           {/* Management Toggles */}
           <div className="flex border-r border-slate-100 pr-4 mr-2 gap-2">
             <button 
+              onClick={() => setIsAddingTurma(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-xs font-bold transition-all"
+            >
+              <Calendar className="w-4 h-4" />
+              Turmas
+            </button>
+            <button 
               onClick={() => setIsAddingSubject(true)}
               className="flex items-center gap-2 px-4 py-2 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-xs font-bold transition-all"
             >
@@ -591,13 +598,6 @@ export default function ScheduleGenerator() {
             >
               <Users className="w-4 h-4" />
               Professores
-            </button>
-            <button 
-              onClick={() => setIsAddingTurma(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-xs font-bold transition-all"
-            >
-              <Calendar className="w-4 h-4" />
-              Turmas
             </button>
           </div>
 
