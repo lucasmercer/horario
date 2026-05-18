@@ -16,7 +16,9 @@ import {
   AlertCircle,
   Pencil,
   Image as ImageIcon,
-  X
+  X,
+  DoorClosed,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -31,17 +33,27 @@ interface Subject {
   id: string;
   name: string;
   workload: number;
+  useLabComp?: boolean;
+  useLabTab?: boolean;
+  useSalaMat?: boolean;
+  labWorkload?: number;
+  classWorkload?: number;
+  roomIds?: string[];
+  customWorkloads?: Record<string, { workload: number; classWorkload: number; labWorkload: number }>;
 }
 
 interface Turma {
   id: string;
   name: string;
-  shift?: 'manha' | 'tarde' | 'noite';
+  shift?: 'manha' | 'tarde' | 'noite' | 'ambos';
+  isRoom?: boolean;
+  color?: string;
 }
 
 interface ScheduleSlot {
   teacherId: string;
   subjectId: string;
+  associatedTurmaId?: string;
 }
 
 type Schedule = Record<string, ScheduleSlot>; // Key format: "day-period" e.g. "seg-1"
@@ -58,6 +70,10 @@ const DAYS = [
 const PERIODS_MANHA = [1, 2, 3, 4, 5, 6];
 const PERIODS_TARDE = [7, 8, 9, 10, 11, 12];
 
+const ID_LAB_INFO_COMP = 'lab-info-comp-id';
+const ID_LAB_INFO_TAB = 'lab-info-tab-id';
+const ID_SALA_MAT = 'sala-mat-id';
+
 const getDisplayPeriod = (p: number) => p > 6 ? p - 6 : p;
 const getShift = (p: number) => p > 6 ? 'tarde' : 'manha';
 
@@ -67,11 +83,12 @@ export default function ScheduleGenerator() {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [schedules, setSchedules] = useState<AllSchedules>({});
   const [version, setVersion] = useState<number>(10);
-  const [logoUrl, setLogoUrl] = useState<string>('');
+  const [logoUrl, setLogoUrl] = useState<string>('http://lucasleniar.com.br/mint/civico.png');
   const [showLogoInput, setShowLogoInput] = useState(false);
   const [tempLogoUrl, setTempLogoUrl] = useState('');
   
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'turmas' | 'rooms'>('turmas');
   const [importShift, setImportShift] = useState<'manha' | 'tarde'>('manha');
   
   const [newTeacherName, setNewTeacherName] = useState('');
@@ -79,18 +96,31 @@ export default function ScheduleGenerator() {
   const [newTeacherAvailability, setNewTeacherAvailability] = useState<string[]>([]);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectWorkload, setNewSubjectWorkload] = useState<number>(5);
+  const [newSubjectUseLabComp, setNewSubjectUseLabComp] = useState(false);
+  const [newSubjectUseLabTab, setNewSubjectUseLabTab] = useState(false);
+  const [newSubjectUseSalaMat, setNewSubjectUseSalaMat] = useState(false);
+  const [newSubjectRoomIds, setNewSubjectRoomIds] = useState<string[]>([]);
+  const [newSubjectLabWorkload, setNewSubjectLabWorkload] = useState<number>(0);
+  const [newSubjectCustomWorkloads, setNewSubjectCustomWorkloads] = useState<Record<string, { workload: number; classWorkload: number; labWorkload: number }>>({});
+  const [showCustomWorkloads, setShowCustomWorkloads] = useState(false);
+  const [newSubjectClassWorkload, setNewSubjectClassWorkload] = useState<number>(0);
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [tempTeacher, setTempTeacher] = useState('');
   const [tempSubject, setTempSubject] = useState('');
+  const [tempAssociatedTurmaId, setTempAssociatedTurmaId] = useState('');
+  const [slotError, setSlotError] = useState<string | null>(null);
   const [editingTeacherId, setEditingTeacherId] = useState<string | null>(null);
 
   const [isSaved, setIsSaved] = useState(false);
 
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
+  const [isAddingRoom, setIsAddingRoom] = useState(false);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   const [isAddingTurma, setIsAddingTurma] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomColor, setNewRoomColor] = useState('#6366f1');
   const [isPrintingTurmaSelection, setIsPrintingTurmaSelection] = useState(false);
   const [isClearingSelection, setIsClearingSelection] = useState(false);
   const [newTurmaName, setNewTurmaName] = useState('');
@@ -102,12 +132,24 @@ export default function ScheduleGenerator() {
   // or at least ensure the ones without shift show up correctly.
   const displayedTurmas = turmas
     .filter(t => {
+      // Excluir as turmas virtuais das salas das listagens normais
+      if (t.isRoom) return false;
+      
       if (t.shift) return t.shift === importShift;
       // Fallback for older data or implicitly named turmas
       const isNamedTarde = t.name.toLowerCase().includes('tarde');
       return importShift === 'manha' ? !isNamedTarde : isNamedTarde;
     })
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+  // Initialize version and logo on mount
+  useEffect(() => {
+    const savedLogo = localStorage.getItem('cecm_logo_url');
+    if (savedLogo) setLogoUrl(savedLogo);
+    
+    const savedVersion = localStorage.getItem('cecm_version');
+    if (savedVersion) setVersion(parseInt(savedVersion));
+  }, []);
 
   // Synchronize selected turma when shift changes or list changes
   useEffect(() => {
@@ -147,22 +189,70 @@ export default function ScheduleGenerator() {
         }));
         setTeachers(parsed);
       }
-      if (savedSubjects) setSubjects(JSON.parse(savedSubjects));
+      if (savedSubjects) {
+        let parsedSubjects = JSON.parse(savedSubjects);
+        // Migração: Se não houver roomIds, criar a partir dos booleanos antigos
+        parsedSubjects = parsedSubjects.map((s: any) => {
+          if (!s.roomIds) {
+            const roomIds = [];
+            if (s.useLabComp) roomIds.push(ID_LAB_INFO_COMP);
+            if (s.useLabTab) roomIds.push(ID_LAB_INFO_TAB);
+            if (s.useSalaMat) roomIds.push(ID_SALA_MAT);
+            return { ...s, roomIds };
+          }
+          return s;
+        });
+        setSubjects(parsedSubjects);
+      }
+      
+      const savedLogo = localStorage.getItem('cecm_logo_url');
+      if (savedLogo) setLogoUrl(savedLogo);
       
       const savedVersion = localStorage.getItem('cecm_version');
       if (savedVersion) setVersion(parseInt(savedVersion));
 
       if (savedTurmas) {
-        const parsedTurmas = JSON.parse(savedTurmas);
+        let parsedTurmas = JSON.parse(savedTurmas);
+        const specialRooms = [
+          { id: ID_LAB_INFO_COMP, name: 'LABORATÓRIO 1', shift: 'ambos', isRoom: true, color: '#9333ea' },
+          { id: ID_LAB_INFO_TAB, name: 'LABORATÓRIO 2', shift: 'ambos', isRoom: true, color: '#2563eb' },
+          { id: ID_SALA_MAT, name: 'SALA DE MATEMÁTICA', shift: 'ambos', isRoom: true, color: '#f97316' }
+        ];
+
+        let updated = false;
+        specialRooms.forEach(room => {
+          const existing = parsedTurmas.find((t: any) => t.id === room.id);
+          if (!existing) {
+            parsedTurmas.push(room);
+            updated = true;
+          } else if (!existing.isRoom) {
+            existing.isRoom = true;
+            if (!existing.color) existing.color = room.color;
+            updated = true;
+          }
+        });
+
+        if (updated) {
+          localStorage.setItem('cecm_turmas', JSON.stringify(parsedTurmas));
+        }
+
         setTurmas(parsedTurmas);
         if (parsedTurmas.length > 0) setSelectedTurmaId(parsedTurmas[0].id);
       } else {
+        const specialRooms = [
+          { id: ID_LAB_INFO_COMP, name: 'LABORATÓRIO 1', shift: 'ambos', isRoom: true, color: '#9333ea' },
+          { id: ID_LAB_INFO_TAB, name: 'LABORATÓRIO 2', shift: 'ambos', isRoom: true, color: '#2563eb' },
+          { id: ID_SALA_MAT, name: 'SALA DE MATEMÁTICA', shift: 'ambos', isRoom: true, color: '#f97316' }
+        ];
         const defaultTurmas = Array.from({ length: 12 }, (_, i) => ({
           id: generateId(),
-          name: `${Math.floor(i/3) + 6}º Ano ${String.fromCharCode(65 + (i % 3))}`
+          name: `${Math.floor(i/3) + 6}º Ano ${String.fromCharCode(65 + (i % 3))}`,
+          shift: 'manha'
         }));
-        setTurmas(defaultTurmas);
-        setSelectedTurmaId(defaultTurmas[0].id);
+        const initialTurmas = [...specialRooms, ...defaultTurmas];
+        setTurmas(initialTurmas);
+        localStorage.setItem('cecm_turmas', JSON.stringify(initialTurmas));
+        if (initialTurmas.length > 0) setSelectedTurmaId(initialTurmas[0].id);
       }
       
       if (savedSchedules) setSchedules(JSON.parse(savedSchedules));
@@ -257,16 +347,52 @@ export default function ScheduleGenerator() {
           if (userConfirmed) {
             // Ensure all data is set, providing defaults for older backups
             setTeachers(data.teachers || []);
-            setSubjects(data.subjects || []);
-            setTurmas(data.turmas || []);
+            
+            // Migração de subjects no import
+            let importedSubjects = (data.subjects || []).map((s: any) => {
+              if (!s.roomIds) {
+                const roomIds = [];
+                if (s.useLabComp) roomIds.push(ID_LAB_INFO_COMP);
+                if (s.useLabTab) roomIds.push(ID_LAB_INFO_TAB);
+                if (s.useSalaMat) roomIds.push(ID_SALA_MAT);
+                return { ...s, roomIds };
+              }
+              return s;
+            });
+            setSubjects(importedSubjects);
+            
+            let importedTurmas = (data.turmas || []).map((t: any) => {
+              // Migração: Se for um dos IDs antigos, garantir que isRoom: true
+              if ([ID_LAB_INFO_COMP, ID_LAB_INFO_TAB, ID_SALA_MAT].includes(t.id)) {
+                return { 
+                  ...t, 
+                  isRoom: true, 
+                  color: t.color || (t.id === ID_LAB_INFO_COMP ? '#9333ea' : t.id === ID_LAB_INFO_TAB ? '#2563eb' : '#f97316') 
+                };
+              }
+              return t;
+            });
+
+            const specialRooms = [
+              { id: ID_LAB_INFO_COMP, name: 'LABORATÓRIO 1', shift: 'ambos', isRoom: true, color: '#9333ea' },
+              { id: ID_LAB_INFO_TAB, name: 'LABORATÓRIO 2', shift: 'ambos', isRoom: true, color: '#2563eb' },
+              { id: ID_SALA_MAT, name: 'SALA DE MATEMÁTICA', shift: 'ambos', isRoom: true, color: '#f97316' }
+            ];
+            
+            specialRooms.forEach(room => {
+              if (!importedTurmas.find((t: any) => t.id === room.id)) {
+                importedTurmas.push(room);
+              }
+            });
+            
+            setTurmas(importedTurmas);
             setSchedules(data.schedules || {});
             setLogoUrl(data.logoUrl || '');
             setVersion(prev => (data.version || prev) + 1);
             
-            if (data.turmas && data.turmas.length > 0) {
-              setSelectedTurmaId(data.turmas[0].id);
-              // Handle potential legacy data where shift might be missing
-              const firstTurma = data.turmas[0];
+            if (importedTurmas.length > 0) {
+              setSelectedTurmaId(importedTurmas[0].id);
+              const firstTurma = importedTurmas[0];
               if (firstTurma.shift) {
                 setImportShift(firstTurma.shift);
               } else if (firstTurma.name?.toLowerCase().includes('tarde')) {
@@ -354,17 +480,44 @@ export default function ScheduleGenerator() {
   const addSubject = () => {
     if (!newSubjectName.trim()) return;
     
+    // Validação: Carga em sala + Carga em Lab/Especial não pode ser maior que Carga Total
+    if ((newSubjectClassWorkload + newSubjectLabWorkload) > newSubjectWorkload) {
+      alert(`Erro: A soma das aulas em sala (${newSubjectClassWorkload}) e aulas em laboratório/especial (${newSubjectLabWorkload}) não pode ser maior que a carga horária total da disciplina (${newSubjectWorkload}).`);
+      return;
+    }
+
+    // Validar custom workloads se existirem
+    for (const tid in newSubjectCustomWorkloads) {
+      const cw = newSubjectCustomWorkloads[tid];
+      if ((cw.classWorkload + cw.labWorkload) > cw.workload) {
+        const turma = turmas.find(t => t.id === tid);
+        alert(`Erro na Turma ${turma?.name || tid}: A soma das aulas em sala (${cw.classWorkload}) e aulas em laboratório/especial (${cw.labWorkload}) não pode ser maior que a carga horária total (${cw.workload}).`);
+        return;
+      }
+    }
+    
+    const subjectData = {
+      name: newSubjectName,
+      workload: newSubjectWorkload || 1,
+      useLabComp: newSubjectUseLabComp,
+      useLabTab: newSubjectUseLabTab,
+      useSalaMat: newSubjectUseSalaMat,
+      roomIds: newSubjectRoomIds,
+      labWorkload: newSubjectLabWorkload,
+      classWorkload: newSubjectClassWorkload,
+      customWorkloads: newSubjectCustomWorkloads
+    };
+
     if (editingSubjectId) {
       setSubjects(prev => prev.map(s => s.id === editingSubjectId 
-        ? { ...s, name: newSubjectName, workload: newSubjectWorkload || 1 } 
+        ? { ...s, ...subjectData } 
         : s
       ));
       setEditingSubjectId(null);
     } else {
       const newSubject = { 
         id: generateId(), 
-        name: newSubjectName, 
-        workload: newSubjectWorkload || 1 
+        ...subjectData
       };
       setSubjects([...subjects, newSubject]);
     }
@@ -372,12 +525,25 @@ export default function ScheduleGenerator() {
     incrementVersion();
     setNewSubjectName('');
     setNewSubjectWorkload(2);
+    setNewSubjectUseLabComp(false);
+    setNewSubjectUseLabTab(false);
+    setNewSubjectUseSalaMat(false);
+    setNewSubjectRoomIds([]);
+    setNewSubjectLabWorkload(0);
+    setNewSubjectClassWorkload(0);
   };
 
   const startEditSubject = (subject: Subject) => {
     setEditingSubjectId(subject.id);
     setNewSubjectName(subject.name);
     setNewSubjectWorkload(subject.workload);
+    setNewSubjectUseLabComp(subject.useLabComp || false);
+    setNewSubjectUseLabTab(subject.useLabTab || false);
+    setNewSubjectUseSalaMat(subject.useSalaMat || false);
+    setNewSubjectRoomIds(subject.roomIds || []);
+    setNewSubjectLabWorkload(subject.labWorkload || 0);
+    setNewSubjectClassWorkload(subject.classWorkload || 0);
+    setNewSubjectCustomWorkloads(subject.customWorkloads || {});
   };
 
   const removeTeacher = (id: string) => {
@@ -387,6 +553,20 @@ export default function ScheduleGenerator() {
 
   const removeSubject = (id: string) => {
     setSubjects(subjects.filter(s => s.id !== id));
+    incrementVersion();
+  };
+
+  const addRoom = () => {
+    if (!newRoomName.trim()) return;
+    const newRoom: Turma = {
+      id: generateId(),
+      name: newRoomName.trim().toUpperCase(),
+      shift: 'ambos',
+      isRoom: true,
+      color: newRoomColor
+    };
+    setTurmas([...turmas, newRoom]);
+    setNewRoomName('');
     incrementVersion();
   };
 
@@ -430,6 +610,8 @@ export default function ScheduleGenerator() {
     setNewTurmaShift(turma.shift || importShift); // Use active shift as default
   };
 
+  const [showAllSubjectsInRoom, setShowAllSubjectsInRoom] = useState(false);
+
   const handleSlotClick = (dayId: string, periodId: number, turmaId: string) => {
     setSelectedTurmaId(turmaId);
     const slotId = `${dayId}-${periodId}`;
@@ -437,6 +619,9 @@ export default function ScheduleGenerator() {
     setSelectedSlot(slotId);
     setTempTeacher(currentSchedule[slotId]?.teacherId || '');
     setTempSubject(currentSchedule[slotId]?.subjectId || '');
+    setTempAssociatedTurmaId(currentSchedule[slotId]?.associatedTurmaId || '');
+    setSlotError(null);
+    setShowAllSubjectsInRoom(false); // Reset when opening modal
   };
 
   const saveSlot = () => {
@@ -444,7 +629,7 @@ export default function ScheduleGenerator() {
     
     // Safety check if no subjects or teachers exist
     if (subjects.length === 0 || teachers.length === 0) {
-      alert("É necessário cadastrar pelo menos uma disciplina e um professor primeiro.");
+      setSlotError("É necessário cadastrar pelo menos uma disciplina e um professor primeiro.");
       return;
     }
 
@@ -454,26 +639,53 @@ export default function ScheduleGenerator() {
       if (selectedSlot && currentSchedule[selectedSlot]) {
         delete currentSchedule[selectedSlot];
       } else {
-        alert("Por favor, selecione uma disciplina.");
+        setSlotError("Por favor, selecione uma disciplina.");
         return;
       }
+    } else if (viewMode === 'rooms' && !tempAssociatedTurmaId) {
+      setSlotError("Por favor, selecione a turma que utilizará a sala.");
+      return;
     } else if (!tempTeacher) {
-      alert("Por favor, selecione um professor para esta disciplina.");
+      setSlotError("Por favor, selecione um professor.");
       return;
     } else {
       // Workload Validation
       const subject = subjects.find(s => s.id === tempSubject);
       if (subject) {
-        const currentUsage = Object.values(currentSchedule).filter((slot: ScheduleSlot) => slot.subjectId === tempSubject).length;
-        const isEditingSameSubject = (currentSchedule[selectedSlot] as ScheduleSlot)?.subjectId === tempSubject;
+        const usage = getWorkloadUsage(tempSubject);
+        const currentSlotData = (schedules[selectedTurmaId] || {})[selectedSlot] as ScheduleSlot;
         
-        if (!isEditingSameSubject && currentUsage >= subject.workload) {
-          alert(`Limite de carga horária atingido para ${subject.name} (${subject.workload} aulas semanais).`);
-          return;
+        const isEditingSame = currentSlotData?.subjectId === tempSubject && 
+                              (viewMode === 'rooms' ? currentSlotData?.associatedTurmaId === tempAssociatedTurmaId : true);
+
+        if (!isEditingSame) {
+          if (viewMode === 'turmas') {
+            // Classroom assignment
+            if (usage.classroomUsage >= usage.classroomTotal) {
+              setSlotError(`Limite de aulas em SALA atingido para ${subject.name} (${usage.classroomTotal} aulas). Verifique a configuração da carga horária desta disciplina.`);
+              return;
+            }
+          } else {
+            // Lab assignment
+            if (usage.labUsage >= usage.labTotal) {
+              setSlotError(`Limite de aulas em LABORATÓRIO/ESPECIAL atingido para ${subject.name} (${usage.labUsage}/${usage.labTotal} aulas). Você precisa aumentar a 'Carga em Lab' nas configurações da disciplina.`);
+              return;
+            }
+          }
+
+          if (usage.usage >= usage.total) {
+            setSlotError(`Limite TOTAL de carga horária atingido para ${subject.name} (Máximo ${usage.total} aulas semanais).`);
+            return;
+          }
         }
       }
-      currentSchedule[selectedSlot] = { teacherId: tempTeacher, subjectId: tempSubject };
     }
+
+    currentSchedule[selectedSlot] = { 
+      teacherId: tempTeacher, 
+      subjectId: tempSubject,
+        associatedTurmaId: viewMode === 'rooms' ? tempAssociatedTurmaId : undefined
+      };
 
     setSchedules({
       ...schedules,
@@ -485,9 +697,45 @@ export default function ScheduleGenerator() {
   };
 
   const getWorkloadUsage = (subjectId: string) => {
-    if (!selectedTurmaId) return 0;
-    const currentSchedule = schedules[selectedTurmaId] || {};
-    return Object.values(currentSchedule).filter((slot: ScheduleSlot) => slot.subjectId === subjectId).length;
+    if (!selectedTurmaId) return { usage: 0, total: 0, classroomUsage: 0, labUsage: 0, classroomTotal: 0, labTotal: 0 };
+    
+    const subject = subjects.find(s => s.id === subjectId);
+    if (!subject) return { usage: 0, total: 0, classroomUsage: 0, labUsage: 0, classroomTotal: 0, labTotal: 0 };
+
+    // Identificar a turma "real" que consome a carga
+    const targetTurma = turmas.find(t => t.id === selectedTurmaId);
+    const actualTurmaId = targetTurma?.isRoom ? tempAssociatedTurmaId : selectedTurmaId;
+    
+    if (!actualTurmaId) return { usage: 0, total: 0, classroomUsage: 0, labUsage: 0, classroomTotal: 0, labTotal: 0 };
+
+    // 1. Uso em sala de aula (no horário da própria turma)
+    const classroomSchedule = schedules[actualTurmaId] || {};
+    const classroomUsage = Object.values(classroomSchedule).filter((slot: ScheduleSlot) => slot.subjectId === subjectId).length;
+
+    // 2. Uso em laboratórios/salas especiais (em outros horários onde esta turma é associada)
+    let labUsage = 0;
+    Object.keys(schedules).forEach(rid => {
+      const room = turmas.find(t => t.id === rid);
+      if (room && room.isRoom) {
+        labUsage += Object.values(schedules[rid]).filter((slot: ScheduleSlot) => 
+          slot.subjectId === subjectId && slot.associatedTurmaId === actualTurmaId
+        ).length;
+      }
+    });
+
+    const custom = subject.customWorkloads?.[actualTurmaId];
+    const total = custom ? custom.workload : subject.workload;
+    const cTotal = custom ? custom.classWorkload : (subject.classWorkload || 0);
+    const lTotal = custom ? custom.labWorkload : (subject.labWorkload || 0);
+
+    return { 
+      usage: classroomUsage + labUsage, 
+      total,
+      classroomUsage,
+      classroomTotal: cTotal,
+      labUsage,
+      labTotal: lTotal
+    };
   };
 
   const handlePrintSingleTurma = (turma: Turma) => {
@@ -524,7 +772,20 @@ export default function ScheduleGenerator() {
                 return currentPeriods.map((pId, pIndex) => {
                   const pName = `${pIndex + 1}ª aula`;
                   const time = currentTimeRanges[pIndex];
-                  const slot = schedules[turma.id]?.[`${day.id}-${pId}`];
+                  const slotKey = `${day.id}-${pId}`;
+                  let slot = schedules[turma.id]?.[slotKey];
+                  
+                  // Se não houver slot na turma, procurar em salas especiais
+                  if (!slot) {
+                    for (const rid in schedules) {
+                      const room = turmas.find(t => t.id === rid);
+                      if (room?.isRoom && schedules[rid][slotKey]?.associatedTurmaId === turma.id) {
+                        slot = schedules[rid][slotKey];
+                        break;
+                      }
+                    }
+                  }
+                  
                   const teacher = teachers.find(t => t.id === slot?.teacherId);
                   const subject = subjects.find(s => s.id === slot?.subjectId);
                   
@@ -566,8 +827,379 @@ export default function ScheduleGenerator() {
     return html;
   };
 
+  const handlePrintLabsHorizontal = () => {
+    const timeRangesManha = ["7h30 às 8h20", "8h20 às 9h10", "9h10 às 10h", "10h20 às 11h10", "11h10 às 12h", "12h às 12h50"];
+    const timeRangesTarde = ["13h às 13h50", "13h50 às 14h40", "14h40 às 15h30", "15h50 às 16h40", "16h40 às 17h30", "17h30 às 18h20"];
+    
+    const generateTable = (shift: 'manha' | 'tarde') => {
+      const periods = shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
+      const timeRanges = shift === 'manha' ? timeRangesManha : timeRangesTarde;
+      
+      const specialRooms = turmas.filter(t => t.isRoom);
+
+      return `
+        <div style="margin-bottom: 0px; page-break-after: always; width: 100%; box-sizing: border-box;">
+          <!-- Cabeçalho em todas as páginas -->
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px; border-bottom: 1pt solid black; padding-bottom: 3px;">
+            ${logoUrl ? `<img src="${logoUrl}" style="height: 32px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
+            <div style="text-align: center;">
+              <h1 style="margin: 0; font-size: 9pt; font-weight: 800; text-transform: uppercase;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA</h1>
+              <h2 style="margin: 0; font-size: 7.5pt; font-weight: 700; color: #334155;">CRONOGRAMA DE SALAS ESPECIAIS (LABORATÓRIOS E SALA DE MATEMÁTICA)</h2>
+            </div>
+          </div>
+
+          <h2 style="background: #0f172a; color: white; text-align: center; padding: 2px; margin: 0; font-size: 8pt; font-weight: 800; text-transform: uppercase;">PERÍODO: ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
+          
+          <table style="width: 100%; border-collapse: collapse; table-layout: fixed; border: 1pt solid black;">
+            <thead>
+              <tr style="background: #f1f5f9;">
+                <th style="border: 0.1pt solid black; width: 24px; font-size: 5.5pt; padding: 1px;">DIA</th>
+                <th style="border: 0.1pt solid black; width: 24px; font-size: 5.5pt; padding: 0.5px;">AULA</th>
+                <th style="border: 0.1pt solid black; width: 45px; font-size: 5.5pt; padding: 0.5px;">HORÁRIO</th>
+                ${specialRooms.map(room => `
+                  <th style="border: 0.1pt solid black; font-size: 6.5pt; padding: 1px 0.5px; text-transform: uppercase; background-color: ${room.color || '#6366f1'} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: white; font-weight: 800; line-height: 1;">${room.name}</th>
+                `).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${DAYS.map(day => periods.map((pId, pIdx) => {
+                const slotId = `${day.id}-${pId}`;
+                return `
+                  <tr style="${pIdx === 5 ? 'border-bottom: 1.5pt solid black;' : ''}">
+                    ${pIdx === 0 ? `<td rowspan="7" style="border: 0.1pt solid black; background-color: #0f172a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: white; text-align: center; font-weight: 800; font-size: 6pt; width: 24px;"><span style="display: block; writing-mode: vertical-lr; transform: rotate(180deg); margin: 0 auto; letter-spacing: 0.05em;">${day.label}</span></td>` : ''}
+                    <td style="border: 0.1pt solid black; text-align: center; font-size: 6pt; font-weight: 800; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; height: 11.5pt;">${pIdx + 1}º</td>
+                    <td style="border: 0.1pt solid black; text-align: center; font-size: 5pt; color: #64748b; font-weight: 600;">${timeRanges[pIdx]}</td>
+                    ${specialRooms.map(room => {
+                      const slot = schedules[room.id]?.[slotId];
+                      const teacher = teachers.find(t => t.id === slot?.teacherId);
+                      const subject = subjects.find(s => s.id === slot?.subjectId);
+                      const turma = turmas.find(t => t.id === slot?.associatedTurmaId);
+
+                      return `
+                        <td style="border: 0.1pt solid black; padding: 0.5px 1.5px; height: 11.5pt; vertical-align: middle; font-size: 6pt; text-align: left; overflow: hidden; white-space: nowrap;">
+                          ${teacher ? `
+                            <div style="font-weight: 800; line-height: 1; font-size: 6pt; overflow: hidden; text-overflow: ellipsis;">${teacher.name}</div>
+                            <div style="font-weight: 700; color: #000; font-size: 5.5pt; text-transform: uppercase; border-left: 1pt solid #cbd5e1; padding-left: 2px; margin-top: 0px; overflow: hidden; text-overflow: ellipsis;">
+                              ${turma?.name || ''} ${subject ? `<span style="font-weight: 400; color: #475569; font-size: 5pt; text-transform: none;">- ${subject.name}</span>` : ''}
+                            </div>
+                          ` : ''}
+                        </td>
+                      `;
+                    }).join('')}
+                  </tr>
+                  ${pIdx === 2 ? `
+                    <tr style="height: 10pt; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                      <td colspan="2" style="border: 0.1pt solid black; text-align: center; font-size: 6pt; font-weight: 800; color: #64748b;">${shift === 'manha' ? '10:00 - 10:20' : '15:30 - 15:50'}</td>
+                      <td colspan="${specialRooms.length + 1}" style="border: 0.1pt solid black; text-align: center; font-size: 7pt; font-weight: 800; color: #94a3b8; letter-spacing: 0.8em; text-transform: uppercase; padding: 0;">INTERVALO</td>
+                    </tr>
+                  ` : ''}
+                `;
+              }).join('')).join('')}
+            </tbody>
+          </table>
+          
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 0px; margin-top: 3px;">
+             <div style="font-weight: 800; font-size: 6.5pt; color: #0f172a;">
+               Sistema feito por: Prof. Lucas Mercer Leniar
+               <span style="font-size: 5.5pt; color: #64748b; font-weight: normal; margin-left: 6px;">
+                 - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+               </span>
+             </div>
+             <div style="font-size: 5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 0px;">www.LucasLeniar.com.br</div>
+          </div>
+        </div>
+      `;
+    };
+
+    const html = `
+      <div style="padding: 0px;">
+        ${generateTable('manha')}
+        ${generateTable('tarde')}
+      </div>
+    `;
+
+    executePrintHorizontal(html, 'Cronograma de Salas Especiais');
+  };
+
+  const executePrintHorizontal = (html: string, title: string) => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>${title} - CECM</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+            <style>
+              @page { size: A4 landscape; margin: 0.5cm; }
+              body { 
+                font-family: 'Inter', sans-serif; 
+                margin: 0; 
+                padding: 0; 
+                background: white; 
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              table { border-collapse: collapse; }
+            </style>
+          </head>
+          <body>
+            ${html}
+            <script>window.onload = () => { setTimeout(() => { window.print(); window.close(); }, 500); }</script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
+  const handlePrintGeralTurmas = () => {
+    // Less aggressive filtering for printing
+    const filteredTurmas = turmas.filter(t => !t.isRoom);
+    const manhaTurmas = filteredTurmas.filter(t => t.shift === 'manha' || (!t.shift && !t.name.toLowerCase().includes('tarde'))).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    const tardeTurmas = filteredTurmas.filter(t => t.shift === 'tarde' || (!t.shift && t.name.toLowerCase().includes('tarde'))).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    
+    const generateScheduleTable = (shiftTurmas: Turma[], shift: 'manha' | 'tarde') => {
+      if (shiftTurmas.length === 0) return '';
+      
+      const currentPeriods = shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
+      const timeRangesManha = ["7h30-8h20", "8h20-9h10", "9h10-10h", "10h20-11h10", "11h10-12h", "12h-12h50"];
+      const timeRangesTarde = ["13h-13h50", "13h50-14h40", "14h40-15h30", "15h50-16h40", "16h40-17h30", "17h30-18h20"];
+      const currentTimeRanges = shift === 'manha' ? timeRangesManha : timeRangesTarde;
+
+      return `
+        <div class="print-container">
+          <div class="print-header">
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 2px;">
+              ${logoUrl ? `<img src="${logoUrl}" style="height: 32px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
+              <div style="text-align: center;">
+                <h1 style="font-size: 8.5pt; margin: 0; font-weight: 800; text-transform: uppercase;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA</h1>
+                <h2 style="font-size: 7.5pt; margin: 0; font-weight: 700; color: #1e293b;">HORÁRIO DAS TURMAS - PERÍODO: ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
+              </div>
+            </div>
+          </div>
+          
+          <div class="table-wrapper">
+            <table class="grid-table">
+              <thead>
+                <tr>
+                  <th class="corner-header"></th>
+                  ${shiftTurmas.map(t => `<th class="turma-header">${t.name}</th>`).join('')}
+                  <th class="time-header">HORÁRIO</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${DAYS.map((day) => {
+                  return currentPeriods.map((pId, pIndex) => {
+                    const pName = `${pIndex + 1}ª`;
+                    const time = currentTimeRanges[pIndex];
+                    
+                    return `
+                      <tr class="${pIndex === 5 ? 'day-end' : ''}">
+                        ${pIndex === 0 ? `<td rowspan="7" class="day-cell"><span>${day.label}</span></td>` : ''}
+                          ${shiftTurmas.map(turma => {
+                          const slotKey = `${day.id}-${pId}`;
+                          let slot = schedules[turma.id]?.[slotKey];
+
+                          // Se não houver slot direto, buscar em salas especiais
+                          if (!slot) {
+                            for (const rid in schedules) {
+                              const room = turmas.find(t => t.id === rid);
+                              if (room?.isRoom && schedules[rid][slotKey]?.associatedTurmaId === turma.id) {
+                                slot = schedules[rid][slotKey];
+                                break;
+                              }
+                            }
+                          }
+
+                          const teacher = teachers.find(t => t.id === slot?.teacherId);
+                          const subject = subjects.find(s => s.id === slot?.subjectId);
+                          return `
+                            <td class="slot-cell">
+                              ${subject ? `<div class="subj-name">${subject.name}</div>` : ''}
+                              ${teacher ? `<div class="prof-name">${teacher.name}</div>` : ''}
+                            </td>
+                          `;
+                        }).join('')}
+                        <td class="time-info">
+                          <span class="p-num">${pName}</span>
+                          <span class="p-time">${time}</span>
+                        </td>
+                      </tr>
+                      ${pIndex === 2 ? `
+                        <tr class="interval-row">
+                          ${shiftTurmas.map(() => `<td class="slot-cell" style="background: #f8fafc; text-align: center; font-size: 5pt; font-weight: 800; color: #94a3b8;">INTERVALO</td>`).join('')}
+                          <td class="time-info" style="background: #f1f5f9; padding: 0;">
+                            <span class="p-time" style="font-size: 4pt; font-weight: 800; color: #64748b;">${shift === 'manha' ? '10h-10h20' : '15h30-15h50'}</span>
+                          </td>
+                        </tr>
+                      ` : ''}
+                    `;
+                  }).join('');
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="print-footer" style="display: flex; flex-direction: column; align-items: center; gap: 0px; margin-top: 3px;">
+            <div style="font-weight: 800; font-size: 7pt; color: #0f172a;">
+              Sistema feito por: Prof. Lucas Mercer Leniar
+              <span style="font-size: 5.5pt; color: #64748b; font-weight: normal; margin-left: 8px;">
+                - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <div style="font-size: 5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px;">www.LucasLeniar.com.br</div>
+          </div>
+        </div>
+      `;
+    };
+
+    let html = '';
+    if (manhaTurmas.length > 0) html += generateScheduleTable(manhaTurmas, 'manha');
+    if (tardeTurmas.length > 0) html += generateScheduleTable(tardeTurmas, 'tarde');
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Quadro de Horários - CECM</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+            <style>
+              @page { 
+                size: A4 landscape; 
+                margin: 0.2cm; 
+              }
+              * { box-sizing: border-box; }
+              body { 
+                font-family: 'Inter', sans-serif; 
+                margin: 0; 
+                padding: 0; 
+                background: white; 
+                color: black;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact; 
+              }
+              
+              .print-container { 
+                page-break-after: always; 
+                width: 100%;
+                height: auto;
+                min-height: 160mm;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+              }
+              
+              .print-header { text-align: center; margin-bottom: 2px; }
+              
+              .table-wrapper {
+                flex: 1;
+                width: 100%;
+                overflow: hidden;
+                border: 0.8pt solid black;
+              }
+              
+              .grid-table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                table-layout: fixed; 
+              }
+              
+              th, td { 
+                border: 0.1pt solid #000; 
+                text-align: center; 
+                vertical-align: middle;
+                padding: 0px; 
+              }
+              
+              .corner-header { width: 14px; }
+              .time-header { width: 45px; font-size: 5.5pt; font-weight: 800; background-color: #f1f5f9; }
+              
+              .turma-header { 
+                background-color: #e2e8f0; 
+                font-size: 5.5pt; 
+                font-weight: 800; 
+              }
+              
+              .day-cell { 
+                width: 14px;
+                background-color: #f8fafc;
+                padding: 0;
+              }
+              .day-cell span {
+                display: block;
+                writing-mode: vertical-lr;
+                transform: rotate(180deg);
+                font-size: 5pt; 
+                font-weight: 900; 
+                text-transform: uppercase;
+                margin: 0 auto;
+              }
+              
+              .slot-cell { 
+                overflow: hidden;
+                height: 10pt; 
+                line-height: 1;
+              }
+              
+              .subj-name { 
+                font-size: 4.5pt; 
+                font-weight: 800; 
+                color: black; 
+                text-transform: uppercase;
+                line-height: 1;
+                white-space: nowrap;
+                overflow: hidden;
+              }
+              
+              .prof-name { 
+                font-size: 4pt; 
+                color: #475569; 
+                line-height: 1;
+                white-space: nowrap;
+                overflow: hidden;
+              }
+              
+              .time-info { 
+                background-color: #f8fafc;
+                line-height: 0.8;
+                height: 10pt;
+              }
+              .p-num { display: block; font-size: 4.5pt; font-weight: 700; color: #2563eb; }
+              .p-time { display: block; font-size: 3.5pt; font-weight: 400; color: #64748b; }
+              
+              .print-footer {
+                margin-top: 2px;
+                text-align: right;
+                font-size: 6.5pt;
+                color: black;
+                font-weight: 600;
+              }
+              
+              tr.day-end {
+                border-bottom: 1.5pt solid black;
+              }
+            </style>
+          </head>
+          <body>
+            ${html}
+            <script>
+              window.onload = () => { 
+                setTimeout(() => { 
+                  window.print(); 
+                }, 1000); 
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
   const handlePrintAllTurmasIndividual = () => {
     const html = turmas
+      .filter(t => !t.isRoom)
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
       .map(t => handlePrintSingleTurma(t))
       .join('');
@@ -633,423 +1265,206 @@ export default function ScheduleGenerator() {
 
   return (
     <div className="flex-1 flex flex-col space-y-3 animate-in fade-in duration-700 pb-2 overflow-hidden">
-      {/* Action Bar */}
-      <div className="p-3 px-4 bg-white rounded-2xl border border-slate-200 shadow-sm print:hidden flex flex-col gap-2">
-        {/* Row 1: Management & Save */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest pl-1">
-              Gestão de Horários
-            </h2>
-            <div className="px-2 py-1 bg-slate-100 rounded-md text-[9px] font-black text-slate-500 uppercase tracking-tighter">
-              Versão {version}
+      {/* Action Bar / Navigation */}
+      <div className="bg-white rounded-2xl border-2 border-slate-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] print:hidden flex flex-col divide-y-2 divide-slate-100 overflow-hidden">
+        {/* Header Row: Navigation & Configuration */}
+        <div className="flex flex-wrap items-center justify-between p-3 px-4 gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col">
+              <h1 className="text-sm font-black text-slate-900 uppercase tracking-tighter leading-none flex items-center gap-2">
+                <div className="w-2 h-6 bg-indigo-600 rounded-full"></div>
+                Gestão de Horários
+              </h1>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 pl-4">
+                CECM Gregório Szeremeta • v{version}
+              </span>
+            </div>
+
+            {/* View Mode & Shift Selectors */}
+            <div className="flex items-center gap-3 ml-4 pl-4 border-l-2 border-slate-100">
+              <div className="flex bg-slate-100 p-1 rounded-xl h-10 items-center">
+                <button 
+                  onClick={() => setViewMode('turmas')}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${viewMode === 'turmas' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <Calendar className="w-4 h-4" />
+                  Turmas
+                </button>
+                <button 
+                  onClick={() => setViewMode('rooms')}
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${viewMode === 'rooms' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <DoorClosed className="w-4 h-4" />
+                  Salas Esp.
+                </button>
+              </div>
+
+              <div className="flex bg-slate-100 p-1 rounded-xl h-10 items-center">
+                <button 
+                  onClick={() => setImportShift('manha')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${importShift === 'manha' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  Manhã
+                </button>
+                <button 
+                  onClick={() => setImportShift('tarde')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${importShift === 'tarde' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  Tarde
+                </button>
+              </div>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Management Toggles */}
-            <div className="flex border-r border-slate-100 pr-2 mr-1 gap-1">
-            <button 
-              onClick={() => setIsAddingTurma(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-[10px] font-bold transition-all"
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              Turmas
-            </button>
-            <button 
-              onClick={() => setIsAddingSubject(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-[10px] font-bold transition-all"
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              Disciplinas
-            </button>
-            <button 
-              onClick={() => setIsAddingTeacher(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#657c36]/10 text-[#657c36] hover:bg-[#657c36]/20 rounded-xl text-[10px] font-bold transition-all"
-            >
-              <Users className="w-3.5 h-3.5" />
-              Professores
-            </button>
-          </div>
 
-          {/* Shift Selector */}
-          <div className="flex bg-slate-100 p-0.5 rounded-lg mr-1">
-            <button 
-              onClick={() => setImportShift('manha')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${importShift === 'manha' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}
-            >
-              Manhã
-            </button>
-            <button 
-              onClick={() => setImportShift('tarde')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${importShift === 'tarde' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400'}`}
-            >
-              Tarde
-            </button>
-          </div>
-
-          <div className="flex bg-slate-100 p-0.5 rounded-lg mr-1 items-center">
-            <button 
-              onClick={() => setIsClearingSelection(true)}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-amber-600 hover:bg-amber-100/50 transition-all border border-transparent flex items-center gap-1.5"
-              title="Limpar horários (Turma específica ou Todos)"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Limpar Grade
-            </button>
-            <button 
-              onClick={handleExportData}
-              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-blue-600 hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100 flex items-center gap-1.5"
-              title="Baixar arquivo de backup (.txt)"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Backup: Exp.
-            </button>
-            <label 
-              className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-indigo-600 hover:bg-indigo-50 transition-all border border-transparent hover:border-indigo-100 flex items-center gap-1.5 cursor-pointer"
-              title="Carregar arquivo de backup (.txt)"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Backup: Imp.
-              <input 
-                type="file" 
-                accept=".txt" 
-                className="hidden" 
-                onChange={handleImportBackup} 
-              />
-            </label>
-          </div>
+          <div className="flex items-center gap-3">
+             {/* Logo Action Component */}
+             <div className="relative">
+              {showLogoInput ? (
+                <div className="flex items-center gap-1 bg-white rounded-xl px-3 py-1.5 border-2 border-slate-900 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] animate-in zoom-in-95 duration-200">
+                  <input 
+                    type="text"
+                    value={tempLogoUrl}
+                    onChange={(e) => setTempLogoUrl(e.target.value)}
+                    placeholder="URL da Logo..."
+                    className="w-40 text-[10px] font-bold focus:outline-none bg-transparent"
+                    autoFocus
+                    onBlur={() => {
+                      if (tempLogoUrl === logoUrl) setShowLogoInput(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setLogoUrl(tempLogoUrl);
+                        setShowLogoInput(false);
+                      }
+                      if (e.key === 'Escape') {
+                        setTempLogoUrl(logoUrl);
+                        setShowLogoInput(false);
+                      }
+                    }}
+                  />
+                  <div className="flex items-center gap-1 ml-2">
+                    <button onClick={() => { setLogoUrl(tempLogoUrl); setShowLogoInput(false); }} className="p-1 hover:bg-green-50 rounded-lg text-green-600 transition-colors"><CheckCircle2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => { setTempLogoUrl(logoUrl); setShowLogoInput(false); }} className="p-1 hover:bg-red-50 rounded-lg text-red-500 transition-colors"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => { setTempLogoUrl(logoUrl); setShowLogoInput(true); }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 border-dashed ${logoUrl ? "border-indigo-200 text-indigo-400 hover:border-indigo-400 hover:text-indigo-600" : "border-slate-200 text-slate-400 hover:border-slate-400 hover:text-slate-600"}`}
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  {logoUrl ? 'Logo Escola' : 'Adicionar Logo'}
+                </button>
+              )}
+            </div>
 
             <button 
               onClick={handleSave}
-              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[90px] ${
-                isSaved ? 'bg-green-500 text-white' : 'bg-slate-900 text-white hover:bg-black'
+              className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 border-slate-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[0px] active:translate-y-[0px] active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                isSaved ? 'bg-green-500 text-white border-green-700' : 'bg-indigo-600 text-white border-indigo-900'
               }`}
             >
               {isSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-              {isSaved ? 'Salvo!' : 'Salvar'}
+              {isSaved ? 'Gravado!' : 'Salvar Alterações'}
             </button>
           </div>
         </div>
 
-        {/* Row 2: Print Actions */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100/50">
-          {/* Logo Setting (Left Aligned) */}
-          <div className="flex items-center">
-            {showLogoInput ? (
-              <div className="flex items-center gap-1 bg-white rounded-lg px-2 py-0.5 border border-slate-200 shadow-sm animate-in slide-in-from-left-1 duration-200">
-                <input 
-                  type="text"
-                  value={tempLogoUrl}
-                  onChange={(e) => setTempLogoUrl(e.target.value)}
-                  placeholder="URL da Logo..."
-                  className="w-32 text-[10px] font-bold focus:outline-none bg-transparent"
-                  autoFocus
-                  onBlur={() => {
-                    if (tempLogoUrl === logoUrl) setShowLogoInput(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setLogoUrl(tempLogoUrl);
-                      setShowLogoInput(false);
-                    }
-                    if (e.key === 'Escape') {
-                      setTempLogoUrl(logoUrl);
-                      setShowLogoInput(false);
-                    }
-                  }}
-                />
+        {/* Action Row: Cadastros, Impressão & Backup */}
+        <div className="flex flex-wrap items-center justify-between p-2 px-4 bg-slate-50/50 gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Cadastros:</span>
+            <div className="flex items-center gap-1.5">
+              <button 
+                onClick={() => setIsAddingTurma(true)}
+                className="group flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:border-slate-900 hover:text-slate-900 transition-all shadow-sm"
+              >
+                <div className="p-1 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                  <Calendar className="w-3 h-3" />
+                </div>
+                Turmas
+              </button>
+              <button 
+                onClick={() => setIsAddingSubject(true)}
+                className="group flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:border-slate-900 hover:text-slate-900 transition-all shadow-sm"
+              >
+                <div className="p-1 bg-amber-50 text-amber-600 rounded-lg group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                  <BookOpen className="w-3 h-3" />
+                </div>
+                Disciplinas
+              </button>
+              <button 
+                onClick={() => setIsAddingTeacher(true)}
+                className="group flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:border-slate-900 hover:text-slate-900 transition-all shadow-sm"
+              >
+                <div className="p-1 bg-emerald-50 text-emerald-600 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                  <Users className="w-3 h-3" />
+                </div>
+                Professores
+              </button>
+              <button 
+                onClick={() => setIsAddingRoom(true)}
+                className="group flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:border-slate-900 hover:text-slate-900 transition-all shadow-sm"
+              >
+                <div className="p-1 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <DoorClosed className="w-3 h-3" />
+                </div>
+                Salas Esp.
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5 pr-4 border-r border-slate-200">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Impressão:</span>
+              <button 
+                onClick={() => setIsPrintingTurmaSelection(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-all"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Individual
+              </button>
+              <button 
+                onClick={handlePrintLabsHorizontal}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-xl text-[10px] font-bold hover:bg-indigo-100 transition-all"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Geral Salas
+              </button>
+               <button 
+                onClick={handlePrintGeralTurmas}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-bold hover:bg-black transition-all"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Geral Turmas
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <div className="flex bg-slate-200/50 p-1 rounded-xl items-center gap-1">
                 <button 
-                  onClick={() => {
-                    setLogoUrl(tempLogoUrl);
-                    setShowLogoInput(false);
-                  }}
-                  className="p-1 hover:bg-slate-100 rounded text-[#657c36]"
+                  onClick={handleExportData}
+                  className="p-1.5 hover:bg-white rounded-lg text-slate-600 hover:text-blue-600 transition-all"
+                  title="Baixar Backup (.txt)"
                 >
-                  <CheckCircle2 className="w-3 h-3" />
+                  <Download className="w-4 h-4" />
                 </button>
+                <label className="p-1.5 hover:bg-white rounded-lg text-slate-600 hover:text-indigo-600 transition-all cursor-pointer" title="Restaurar Backup (.txt)">
+                  <FileText className="w-4 h-4" />
+                  <input type="file" accept=".txt" className="hidden" onChange={handleImportBackup} />
+                </label>
                 <button 
-                  onClick={() => {
-                    setTempLogoUrl(logoUrl);
-                    setShowLogoInput(false);
-                  }}
-                  className="p-1 hover:bg-slate-100 rounded text-slate-400"
+                  onClick={() => setIsClearingSelection(true)}
+                  className="p-1.5 hover:bg-white rounded-lg text-slate-400 hover:text-red-600 transition-all"
+                  title="Limpar Grade"
                 >
-                  <X className="w-3 h-3" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-            ) : (
-              <button 
-                onClick={() => {
-                  setTempLogoUrl(logoUrl);
-                  setShowLogoInput(true);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-1.5 ${
-                  logoUrl 
-                    ? "text-[#657c36] hover:bg-[#657c36]/10" 
-                    : "text-slate-500 hover:bg-slate-200"
-                }`}
-                title="Configurar logotipo da escola"
-              >
-                <ImageIcon className="w-3.5 h-3.5" />
-                Logo: {logoUrl ? 'Alt.' : 'Add'}
-              </button>
-            )}
+            </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setIsPrintingTurmaSelection(true)}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[100px]"
-            >
-              <Printer className="w-4 h-4" />
-              Imprimir Turma
-            </button>
-          
-          <button 
-            onClick={() => {
-              // Less aggressive filtering for printing
-              const manhaTurmas = turmas.filter(t => t.shift === 'manha' || (!t.shift && !t.name.toLowerCase().includes('tarde'))).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-              const tardeTurmas = turmas.filter(t => t.shift === 'tarde' || (!t.shift && t.name.toLowerCase().includes('tarde'))).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-              
-              const generateScheduleTable = (shiftTurmas: Turma[], shift: 'manha' | 'tarde') => {
-                if (shiftTurmas.length === 0) return '';
-                
-                const currentPeriods = shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
-                const timeRangesManha = ["7h30 às 8h20", "8h20 às 9h10", "9h10 às 10h", "10h20 às 11h10", "11h10 às 12h", "12h às 12h50"];
-                const timeRangesTarde = ["13h às 13h50", "13h50 às 14h40", "14h40 às 15h30", "15h50 às 16h40", "16h40 às 17h30", "17h30 às 18h20"];
-                const currentTimeRanges = shift === 'manha' ? timeRangesManha : timeRangesTarde;
-
-                return `
-                  <div class="print-container">
-                    <div class="print-header">
-                      <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 2px;">
-                        ${logoUrl ? `<img src="${logoUrl}" style="height: 40px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
-                        <div style="text-align: left;">
-                          <h1 style="font-size: 9pt; margin: 0; font-weight: 800;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
-                          <h2 style="font-size: 8pt; margin: 0; font-weight: 700; color: #1e293b;">HORÁRIO DA ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div class="table-wrapper">
-                      <table class="grid-table">
-                        <thead>
-                          <tr>
-                            <th class="corner-header"></th>
-                            ${shiftTurmas.map(t => `<th class="turma-header">${t.name}</th>`).join('')}
-                            <th class="time-header">CRONOGRAMA HORÁRIO</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          ${DAYS.map((day) => {
-                            return currentPeriods.map((pId, pIndex) => {
-                              const pName = `${pIndex + 1}ª aula`;
-                              const time = currentTimeRanges[pIndex];
-                              
-                              return `
-                                <tr class="${pIndex === 5 ? 'day-end' : ''}">
-                                  ${pIndex === 0 ? `<td rowspan="7" class="day-cell"><span>${day.label}</span></td>` : ''}
-                                  ${shiftTurmas.map(turma => {
-                                    const slot = schedules[turma.id]?.[`${day.id}-${pId}`];
-                                    const teacher = teachers.find(t => t.id === slot?.teacherId);
-                                    const subject = subjects.find(s => s.id === slot?.subjectId);
-                                    return `
-                                      <td class="slot-cell">
-                                        ${subject ? `<div class="subj-name">${subject.name}</div>` : ''}
-                                        ${teacher ? `<div class="prof-name">${teacher.name}</div>` : ''}
-                                      </td>
-                                    `;
-                                  }).join('')}
-                                  <td class="time-info">
-                                    <span class="p-num">${pName}</span>
-                                    <span class="p-time">${time}</span>
-                                  </td>
-                                </tr>
-                                ${pIndex === 2 ? `
-                                  <tr class="interval-row">
-                                    ${shiftTurmas.map(() => `<td class="slot-cell" style="background: #f8fafc; text-align: center; font-size: 5.5pt; font-weight: 800; color: #94a3b8; letter-spacing: 0.1em;">INTERVALO</td>`).join('')}
-                                    <td class="time-info" style="background: #f1f5f9;">
-                                      <span class="p-num" style="color: #64748b; font-size: 5pt;">INTERVALO</span>
-                                      <span class="p-time" style="font-size: 4.5pt;">${shift === 'manha' ? '10h-10h20' : '15h30-15h50'}</span>
-                                    </td>
-                                  </tr>
-                                ` : ''}
-                              `;
-                            }).join('');
-                          }).join('')}
-                        </tbody>
-                      </table>
-                    </div>
-                    
-                    <div class="print-footer" style="display: flex; flex-direction: column; align-items: center; gap: 0px; margin-top: 5px;">
-                      <div style="font-weight: 800; font-size: 7.5pt; color: #0f172a;">
-                        Sistema feito por: Prof. Lucas Mercer Leniar
-                        <span style="font-size: 6pt; color: #64748b; font-weight: normal; margin-left: 8px;">
-                          - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      <div style="font-size: 5.5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px;">www.LucasLeniar.com.br</div>
-                    </div>
-                  </div>
-                `;
-              };
-
-              let html = '';
-              if (manhaTurmas.length > 0) html += generateScheduleTable(manhaTurmas, 'manha');
-              if (tardeTurmas.length > 0) html += generateScheduleTable(tardeTurmas, 'tarde');
-
-              const printWindow = window.open('', '_blank');
-              if (printWindow) {
-                printWindow.document.write(`
-                  <html>
-                    <head>
-                      <title>Quadro de Horários - CECM</title>
-                      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
-                      <style>
-                        @page { 
-                          size: A4 landscape; 
-                          margin: 0.2cm; 
-                        }
-                        * { box-sizing: border-box; }
-                        body { 
-                          font-family: 'Inter', sans-serif; 
-                          margin: 0; 
-                          padding: 0; 
-                          background: white; 
-                          color: black;
-                          -webkit-print-color-adjust: exact; 
-                          print-color-adjust: exact; 
-                        }
-                        
-                        .print-container { 
-                          page-break-after: always; 
-                          width: 100%;
-                          /* Removido altura fixa para evitar quebra em 2 folhas se o conteúdo for denso */
-                          height: auto;
-                          min-height: 170mm;
-                          display: flex;
-                          flex-direction: column;
-                          overflow: hidden;
-                        }
-                        
-                        .print-header { text-align: center; margin-bottom: 0px; }
-                        .print-header h1 { font-size: 9pt; margin: 0; font-weight: 800; }
-                        .print-header h2 { font-size: 8pt; margin: 0; font-weight: 700; color: #1e293b; }
-                        
-                        .table-wrapper {
-                          flex: 1;
-                          width: 100%;
-                          overflow: hidden;
-                          border: 0.8pt solid black;
-                        }
-                        
-                        .grid-table { 
-                          width: 100%; 
-                          height: 100%;
-                          border-collapse: collapse; 
-                          table-layout: fixed; 
-                        }
-                        
-                        th, td { 
-                          border: 0.1pt solid #000; 
-                          text-align: center; 
-                          vertical-align: middle;
-                          padding: 1px 0; /* Padding mínimo vertical */
-                        }
-                        
-                        .corner-header { width: 22px; }
-                        .time-header { width: 100px; font-size: 7.2pt; font-weight: 800; background-color: #f1f5f9; }
-                        
-                        .turma-header { 
-                          background-color: #e2e8f0; 
-                          font-size: 7pt; 
-                          font-weight: 800; 
-                          padding: 1px 0;
-                        }
-                        
-                        .day-cell { 
-                          width: 22px;
-                          background-color: #f8fafc;
-                          padding: 0;
-                        }
-                        .day-cell span {
-                          display: block;
-                          writing-mode: vertical-lr;
-                          transform: rotate(180deg);
-                          font-size: 6.8pt; 
-                          font-weight: 900; 
-                          text-transform: uppercase;
-                          margin: 0 auto;
-                        }
-                        
-                        .slot-cell { 
-                          overflow: hidden;
-                          height: 13pt; /* Reduzindo ainda mais */
-                          line-height: 1;
-                        }
-                        
-                        .subj-name { 
-                          font-size: 6pt; 
-                          font-weight: 800; 
-                          color: black; 
-                          text-transform: uppercase;
-                          line-height: 1;
-                          white-space: nowrap;
-                          overflow: hidden;
-                        }
-                        
-                        .prof-name { 
-                          font-size: 5.5pt; 
-                          color: #475569; 
-                          line-height: 1;
-                          white-space: nowrap;
-                          overflow: hidden;
-                        }
-                        
-                        .time-info { 
-                          background-color: #f8fafc;
-                          line-height: 0.85;
-                          height: 13pt;
-                        }
-                        .p-num { display: block; font-size: 5.8pt; font-weight: 700; color: #2563eb; }
-                        .p-time { display: block; font-size: 4.8pt; font-weight: 400; color: #64748b; }
-                        
-                        .print-footer {
-                          margin-top: 2px;
-                          text-align: right;
-                          font-size: 6.5pt;
-                          color: black;
-                          font-weight: 600;
-                        }
-                        
-                        tr.day-end {
-                          border-bottom: 1.5pt solid black;
-                        }
-                      </style>
-                    </head>
-                    <body>
-                      ${html}
-                      <script>
-                        window.onload = () => { 
-                          setTimeout(() => { 
-                            window.print(); 
-                          }, 1000); 
-                        }
-                      </script>
-                    </body>
-                  </html>
-                `);
-                printWindow.document.close();
-              }
-            }}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm hover:shadow-md active:scale-[0.98] min-w-[100px]"
-          >
-            <Printer className="w-4 h-4" />
-            Quadro Geral
-          </button>
         </div>
       </div>
-    </div>
 
       {/* Main Content (Shifted up) */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -1064,7 +1479,7 @@ export default function ScheduleGenerator() {
                 )}
                 <div className="flex flex-col">
                   <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
-                    Horário {importShift === 'manha' ? 'da Manhã' : 'da Tarde'}
+                    Horário {importShift === 'manha' ? 'da Manhã' : 'da Tarde'} {viewMode === 'rooms' ? '- SALAS/LABS' : ''}
                   </h1>
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mt-1">CECM Gregório Szeremeta</p>
                 </div>
@@ -1086,7 +1501,7 @@ export default function ScheduleGenerator() {
                 <thead>
                   <tr className="bg-slate-100 border-b-2 border-slate-900 sticky top-0 z-20">
                     <th className="bg-slate-100 sticky left-0 z-40 border-r-2 border-slate-900 w-10 min-w-[40px] max-w-[40px]"></th>
-                    {displayedTurmas.map(t => (
+                    {viewMode === 'turmas' ? displayedTurmas.map(t => (
                       <th key={t.id} className="p-0 border-r border-slate-300 text-xs font-black uppercase tracking-widest text-slate-900 min-w-[120px] bg-slate-100">
                         <div className="flex items-center justify-between px-3 py-3 group">
                           <span className="truncate">{t.name}</span>
@@ -1099,6 +1514,12 @@ export default function ScheduleGenerator() {
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
+                        </div>
+                      </th>
+                    )) : turmas.filter(t => t.isRoom).map(t => (
+                      <th key={t.id} className="p-0 border-r border-slate-300 text-xs font-black uppercase tracking-widest text-slate-900 min-w-[150px] bg-indigo-50">
+                        <div className="flex items-center justify-between px-3 py-3 group">
+                          <span className="truncate text-indigo-900">{t.name}</span>
                         </div>
                       </th>
                     ))}
@@ -1119,43 +1540,44 @@ export default function ScheduleGenerator() {
                           <React.Fragment key={`${day.id}-${actualPeriod}`}>
                             <tr className={`border-b border-slate-200 hover:bg-slate-50 transition-colors h-14 ${pIndex === 5 ? 'border-b-[3px] border-slate-900' : ''}`}>
                               {/* Day Column (Sticky Left) */}
-                              {pIndex === 0 && (
-                                <td rowSpan={7} className="bg-slate-900 text-white p-0 w-10 min-w-[40px] max-w-[40px] border-r-2 border-slate-900 sticky left-0 z-40 shadow-[2px_0_10px_rgba(0,0,0,0.1)]">
-                                  <div className="flex items-center justify-center h-full w-full">
-                                    <span className="text-[10px] font-black uppercase [writing-mode:vertical-lr] rotate-180 text-center tracking-widest whitespace-nowrap">
-                                      {day.label}
-                                    </span>
-                                  </div>
-                                </td>
-                              )}
-                              
-                              {displayedTurmas.map(turma => {
-                                const slotId = `${day.id}-${actualPeriod}`;
-                                const slot = schedules[turma.id]?.[slotId];
-                                const teacher = teachers.find(t => t.id === slot?.teacherId);
-                                const subject = subjects.find(s => s.id === slot?.subjectId);
-                                const conflicts = getConflicts(day.id, actualPeriod, slot?.teacherId || '', turma.id);
+                                {pIndex === 0 && (
+                                  <td rowSpan={7} className={`${viewMode === 'rooms' ? 'bg-indigo-900' : 'bg-slate-900'} text-white p-0 w-10 min-w-[40px] max-w-[40px] border-r-2 border-slate-900 sticky left-0 z-40 shadow-[2px_0_10px_rgba(0,0,0,0.1)]`}>
+                                    <div className="flex items-center justify-center h-full w-full">
+                                      <span className="text-[10px] font-black uppercase [writing-mode:vertical-lr] rotate-180 text-center tracking-widest whitespace-nowrap">
+                                        {day.label}
+                                      </span>
+                                    </div>
+                                  </td>
+                                )}
+                                
+                                {(viewMode === 'turmas' ? displayedTurmas : turmas.filter(t => t.isRoom)).map(turma => {
+                                  const slotId = `${day.id}-${actualPeriod}`;
+                                  const slot = schedules[turma.id]?.[slotId];
+                                  const teacher = teachers.find(t => t.id === slot?.teacherId);
+                                  const subject = subjects.find(s => s.id === slot?.subjectId);
+                                  const associatedTurma = turmas.find(t => t.id === slot?.associatedTurmaId);
+                                  const conflicts = getConflicts(day.id, actualPeriod, slot?.teacherId || '', turma.id);
 
-                                return (
-                                  <td 
-                                    key={turma.id}
-                                    onClick={() => handleSlotClick(day.id, actualPeriod, turma.id)}
-                                    className={`p-1.5 border-r border-slate-200 cursor-pointer transition-all group relative ${
-                                      conflicts.length > 0 
-                                        ? 'bg-red-50' 
-                                        : slot 
-                                          ? 'bg-slate-100 hover:bg-slate-200 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)]' 
-                                          : ''
-                                    }`}
-                                  >
-                                    {slot ? (
-                                      <div className="flex flex-col items-center justify-center text-center overflow-hidden">
-                                        <span className={`text-[10px] font-black uppercase leading-[1.1] mb-0.5 ${conflicts.length > 0 ? 'text-red-600' : 'text-slate-800'}`}>
-                                          {subject?.name}
-                                        </span>
-                                        <span className="text-[8px] font-bold text-slate-400 uppercase truncate w-full">
-                                          {teacher?.name}
-                                        </span>
+                                  return (
+                                    <td 
+                                      key={turma.id}
+                                      onClick={() => handleSlotClick(day.id, actualPeriod, turma.id)}
+                                      className={`p-1.5 border-r border-slate-200 cursor-pointer transition-all group relative ${
+                                        conflicts.length > 0 
+                                          ? 'bg-red-50' 
+                                          : slot 
+                                            ? viewMode === 'rooms' ? 'bg-indigo-50 hover:bg-indigo-100' : 'bg-slate-100 hover:bg-slate-200 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)]' 
+                                            : ''
+                                      }`}
+                                    >
+                                      {slot ? (
+                                        <div className="flex flex-col items-center justify-center text-center overflow-hidden">
+                      <span className={`text-[10px] font-black uppercase leading-[1.1] mb-0.5 ${conflicts.length > 0 ? 'text-red-600' : viewMode === 'rooms' ? 'text-indigo-900' : 'text-slate-800'}`}>
+                        {viewMode === 'rooms' ? associatedTurma?.name || 'N/A' : subject?.name}
+                      </span>
+                                          <span className={`text-[8px] font-bold uppercase truncate w-full ${viewMode === 'rooms' ? 'text-indigo-400' : 'text-slate-400'}`}>
+                                            {teacher?.name} {viewMode === 'rooms' && subject ? `• ${subject.name}` : ''}
+                                          </span>
                                         {conflicts.length > 0 && (
                                           <div className="absolute top-0.5 right-0.5">
                                             <AlertCircle className="w-2.5 h-2.5 text-red-500 fill-white" />
@@ -1183,7 +1605,7 @@ export default function ScheduleGenerator() {
                             </tr>
                             {pIndex === 2 && (
                                <tr className="border-b border-slate-300 bg-slate-50/50 h-8">
-                                 {displayedTurmas.map(turma => (
+                                 {(viewMode === 'turmas' ? displayedTurmas : turmas.filter(t => t.isRoom)).map(turma => (
                                    <td key={`intervalo-${turma.id}`} className="border-r border-slate-200 text-center">
                                       <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Intervalo</span>
                                    </td>
@@ -1248,17 +1670,57 @@ export default function ScheduleGenerator() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-center justify-between px-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Matéria</label>
-                  <button 
-                    onClick={() => {
-                      setSelectedSlot(null);
-                      setIsAddingSubject(true);
+                {viewMode === 'rooms' && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Turma que utilizará a sala</label>
+                    <select 
+                      value={tempAssociatedTurmaId}
+                      onChange={e => {
+                      setTempAssociatedTurmaId(e.target.value);
+                      setSlotError(null);
                     }}
-                    className="text-[9px] font-bold text-[#657c36] hover:underline"
-                  >
-                    + Criar Nova
-                  </button>
+                      className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
+                    >
+                      <option value="">Selecionar Turma</option>
+                      {turmas.filter(t => !t.isRoom).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric: true})).map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {viewMode === 'turmas' && tempSubject && subjects.find(s => s.id === tempSubject) && (
+                  <div className="px-1 space-y-1">
+                    {subjects.find(s => s.id === tempSubject)?.roomIds?.map(rid => {
+                      const room = turmas.find(t => t.id === rid);
+                      if (!room) return null;
+                      return (
+                        <div key={rid} className="flex items-center gap-1.5 text-[10px] font-black text-indigo-600 uppercase bg-indigo-50 px-2 py-1 rounded-md animate-in fade-in slide-in-from-top-1">
+                          <CheckCircle2 className="w-3 h-3" /> Requer {room.name}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex items-center justify-between px-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{viewMode === 'rooms' ? 'Disciplina (Permitida para esta sala)' : 'Matéria'}</label>
+                  {viewMode === 'turmas' ? (
+                    <button 
+                      onClick={() => {
+                        setSelectedSlot(null);
+                        setIsAddingSubject(true);
+                      }}
+                      className="text-[9px] font-bold text-[#657c36] hover:underline"
+                    >
+                      + Criar Nova
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => setShowAllSubjectsInRoom(!showAllSubjectsInRoom)}
+                      className="text-[9px] font-bold text-indigo-600 hover:underline"
+                    >
+                      {showAllSubjectsInRoom ? "Ver Apenas Permitidas" : "Ver Todas"}
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <select 
@@ -1266,20 +1728,45 @@ export default function ScheduleGenerator() {
                     onChange={e => {
                       const sId = e.target.value;
                       setTempSubject(sId);
-                      // Se houver professores que ensinam esta disciplina, selecionar o primeiro
-                      const linkedTeachers = teachers.filter(t => t.subjectIds.includes(sId));
-                      if (linkedTeachers.length > 0) {
-                        setTempTeacher(linkedTeachers[0].id);
-                      } else if (teachers.length === 1) {
-                        setTempTeacher(teachers[0].id);
+                      setSlotError(null);
+                      if (viewMode === 'turmas') {
+                        // Se houver professores que ensinam esta disciplina, selecionar o primeiro
+                        const linkedTeachers = teachers.filter(t => t.subjectIds.includes(sId));
+                        if (linkedTeachers.length > 0) {
+                          setTempTeacher(linkedTeachers[0].id);
+                        } else if (teachers.length === 1) {
+                          setTempTeacher(teachers[0].id);
+                        }
                       }
                     }}
-                    className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#657c36] transition-all"
+                    className={`w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none transition-all ${
+                      viewMode === 'rooms' ? 'focus:border-indigo-500' : 'focus:border-[#657c36]'
+                    }`}
                   >
                     <option value="">Selecionar Disciplina</option>
-                    {subjects.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({getWorkloadUsage(s.id)}/{s.workload})</option>
-                    ))}
+                    {viewMode === 'turmas' ? subjects.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({getWorkloadUsage(s.id).usage}/{getWorkloadUsage(s.id).total})
+                      </option>
+                    )) : 
+                      subjects
+                        .filter(s => {
+                          if (showAllSubjectsInRoom) return true;
+                          // Use dynamic roomIds
+                          if (s.roomIds?.includes(selectedTurmaId)) return true;
+                          
+                          // Fallback para IDs legados se a migração ainda não refletiu na UI
+                          if (selectedTurmaId === ID_LAB_INFO_COMP && s.useLabComp) return true;
+                          if (selectedTurmaId === ID_LAB_INFO_TAB && s.useLabTab) return true;
+                          if (selectedTurmaId === ID_SALA_MAT && s.useSalaMat) return true;
+                          
+                          return false;
+                        })
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))
+                    }
                   </select>
                 </div>
 
@@ -1301,6 +1788,7 @@ export default function ScheduleGenerator() {
                     onChange={e => {
                       const tId = e.target.value;
                       setTempTeacher(tId);
+                      setSlotError(null);
                       const teacher = teachers.find(t => t.id === tId);
                       // Se este professor só ensina uma disciplina e nenhuma está selecionada, auto-selecionar
                       if (teacher && teacher.subjectIds.length === 1 && !tempSubject) {
@@ -1314,20 +1802,28 @@ export default function ScheduleGenerator() {
                     }`}
                   >
                     <option value="">Selecionar Professor</option>
-                    {/* First, show linked teachers */}
-                    {teachers.filter(t => !tempSubject || t.subjectIds.includes(tempSubject)).map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                    
-                    {/* Then, if a subject is selected, show others in a group */}
-                    {tempSubject && teachers.filter(t => !t.subjectIds.includes(tempSubject)).length > 0 && (
-                      <optgroup label="Outros Professores (Não vinculados a esta disciplina)">
-                        {teachers
-                          .filter(t => !t.subjectIds.includes(tempSubject))
-                          .map(t => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                      </optgroup>
+                    {viewMode === 'turmas' ? (
+                      <>
+                        {/* First, show linked teachers */}
+                        {teachers.filter(t => !tempSubject || t.subjectIds.includes(tempSubject)).map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                        
+                        {/* Then, if a subject is selected, show others in a group */}
+                        {tempSubject && teachers.filter(t => !t.subjectIds.includes(tempSubject)).length > 0 && (
+                          <optgroup label="Outros Professores (Não vinculados a esta disciplina)">
+                            {teachers
+                              .filter(t => !t.subjectIds.includes(tempSubject))
+                              .map(t => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                          </optgroup>
+                        )}
+                      </>
+                    ) : (
+                      teachers.sort((a,b) => a.name.localeCompare(b.name)).map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))
                     )}
                     
                     {/* If no subject is selected, just show all (already handled by first filter) */}
@@ -1345,6 +1841,15 @@ export default function ScheduleGenerator() {
                   )}
                 </div>
               </div>
+
+              {slotError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 animate-in fade-in zoom-in-95">
+                  <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-[10px] font-bold text-red-600 leading-tight">
+                    {slotError}
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <button 
@@ -1412,7 +1917,10 @@ export default function ScheduleGenerator() {
                 
                 <div className="col-span-2 h-px bg-slate-100 my-2" />
 
-                {turmas.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(turma => (
+                {turmas
+                  .filter(t => !t.isRoom)
+                  .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+                  .map(turma => (
                   <button 
                     key={turma.id}
                     onClick={() => handlePrintTurmaSelection(turma)}
@@ -1478,7 +1986,10 @@ export default function ScheduleGenerator() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pb-2">
-                  {turmas.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(turma => (
+                  {turmas
+                    .filter(t => !t.isRoom)
+                    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+                    .map(turma => (
                     <button 
                       key={turma.id}
                       onClick={() => {
@@ -1562,7 +2073,10 @@ export default function ScheduleGenerator() {
                 </div>
 
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                  {turmas.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(turma => (
+                  {turmas
+                    .filter(t => !t.isRoom)
+                    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+                    .map(turma => (
                     <div key={turma.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
                       <div className="flex flex-col">
                         <span className="text-xs font-black text-slate-800">{turma.name}</span>
@@ -1581,6 +2095,121 @@ export default function ScheduleGenerator() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Rooms Management Modal */}
+      <AnimatePresence>
+        {isAddingRoom && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden"
+            >
+              <div className="flex justify-between items-center px-8 pt-8">
+                <h3 className="text-xl font-black text-slate-900 uppercase">
+                  Salas Especiais
+                </h3>
+                <button 
+                  onClick={() => setIsAddingRoom(false)} 
+                  className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-8 pt-4 space-y-6">
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nova Sala Especial</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Ex: LAB ARTES"
+                        value={newRoomName}
+                        onChange={e => setNewRoomName(e.target.value)}
+                        className="flex-1 px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
+                        onKeyDown={e => e.key === 'Enter' && addRoom()}
+                      />
+                      <input 
+                        type="color" 
+                        value={newRoomColor}
+                        onChange={e => setNewRoomColor(e.target.value)}
+                        className="w-12 h-11 p-1 bg-slate-50 border-2 border-slate-100 rounded-xl cursor-pointer"
+                      />
+                      <button 
+                        onClick={addRoom}
+                        className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-sm"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-slate-100" />
+                  
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    {turmas
+                      .filter(t => t.isRoom)
+                      .map(room => (
+                        <div key={room.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
+                          <div className="flex items-center gap-3">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: room.color || '#6366f1' }}
+                            />
+                            <div className="flex flex-col">
+                              <input 
+                                type="text"
+                                value={room.name}
+                                onChange={e => {
+                                  const newName = e.target.value.toUpperCase();
+                                  setTurmas(prev => prev.map(t => t.id === room.id ? { ...t, name: newName } : t));
+                                  incrementVersion();
+                                }}
+                                className="text-xs font-black text-slate-800 bg-transparent border-none p-0 focus:ring-0 w-32"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <input 
+                              type="color"
+                              value={room.color || '#6366f1'}
+                              onChange={e => {
+                                setTurmas(prev => prev.map(t => t.id === room.id ? { ...t, color: e.target.value } : t));
+                                incrementVersion();
+                              }}
+                              className="w-6 h-6 p-0 border-none bg-transparent cursor-pointer"
+                            />
+                            <button 
+                              onClick={() => {
+                                if (confirm(`Deseja remover a sala ${room.name}? Isso apagará os horários desta sala.`)) {
+                                  removeTurma(room.id);
+                                }
+                              }}
+                              className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+                
+                <div className="pt-2">
+                  <button 
+                    onClick={() => setIsAddingRoom(false)}
+                    className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-[0.2em] hover:bg-black transition-all"
+                  >
+                    Concluir
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -1871,15 +2500,23 @@ export default function ScheduleGenerator() {
                     setEditingSubjectId(null);
                     setNewSubjectName('');
                     setNewSubjectWorkload(2);
+                    setNewSubjectUseLabComp(false);
+                    setNewSubjectUseLabTab(false);
+                    setNewSubjectUseSalaMat(false);
+                    setNewSubjectRoomIds([]);
+                    setNewSubjectLabWorkload(0);
+                    setNewSubjectClassWorkload(0);
+                    setNewSubjectCustomWorkloads({});
+                    setShowCustomWorkloads(false);
                   }} 
                   className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500"
                 >
-                  ×
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
               <div className="space-y-4">
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <input 
                     type="text" 
                     value={newSubjectName}
@@ -1888,49 +2525,180 @@ export default function ScheduleGenerator() {
                     placeholder="Nome da Disciplina (Ex: Matemática)"
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:outline-none focus:border-slate-900 transition-all"
                   />
-                  <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-                    <span className="text-[10px] font-black text-slate-400 uppercase flex-1">Aulas por Semana:</span>
+                  
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-black text-slate-400 uppercase ml-1">Carga Horária Total (Aulas):</span>
                     <input 
                       type="number" 
                       min="1"
-                      max="10"
                       value={newSubjectWorkload}
-                      onChange={e => setNewSubjectWorkload(parseInt(e.target.value) || 1)}
-                      onKeyDown={e => e.key === 'Enter' && addSubject()}
-                      className="w-12 bg-transparent text-sm font-black text-slate-900 text-center focus:outline-none"
+                      onChange={e => {
+                        const val = parseInt(e.target.value) || 1;
+                        setNewSubjectWorkload(val);
+                        // Padrão: todas as aulas em sala, zero em laboratório
+                        // O usuário pode customizar isso por turma na seção abaixo
+                        setNewSubjectClassWorkload(val);
+                        setNewSubjectLabWorkload(0);
+                      }}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-900 focus:outline-none focus:border-slate-900"
                     />
-                    <button onClick={addSubject} className={`px-4 py-2 rounded-lg transition-all ${editingSubjectId ? 'bg-[#657c36] text-white' : 'bg-slate-900 text-white hover:bg-black'}`}>
-                      {editingSubjectId ? <CheckCircle2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                    </button>
                   </div>
+
+                  <div className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-black text-slate-400 uppercase">Salas Especiais:</span>
+                    <div className="flex flex-wrap gap-3">
+                      {turmas.filter(t => t.isRoom).map(room => (
+                        <label key={room.id} className="flex items-center gap-2 cursor-pointer group">
+                          <input 
+                            type="checkbox" 
+                            checked={newSubjectRoomIds.includes(room.id)}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setNewSubjectRoomIds([...newSubjectRoomIds, room.id]);
+                              } else {
+                                setNewSubjectRoomIds(newSubjectRoomIds.filter(rid => rid !== room.id));
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-slate-300 text-[#657c36] focus:ring-[#657c36]"
+                          />
+                          <span className="text-xs font-bold text-slate-600 group-hover:text-slate-900">{room.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {(newSubjectClassWorkload + newSubjectLabWorkload) > newSubjectWorkload && (
+                    <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-100 rounded-xl">
+                      <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                      <p className="text-[10px] font-bold text-red-600 leading-tight">
+                        A soma das aulas ({newSubjectClassWorkload + newSubjectLabWorkload}) excede a carga total ({newSubjectWorkload}).
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <button 
+                      onClick={() => setShowCustomWorkloads(!showCustomWorkloads)}
+                      className="w-full flex items-center justify-between px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+                    >
+                      <span className="text-[10px] font-black text-slate-600 uppercase">Cargas específicas por Turma</span>
+                      <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${showCustomWorkloads ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {showCustomWorkloads && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="mt-3 space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar border-l-2 border-slate-100 pl-3 pb-2"
+                      >
+                        <p className="text-[9px] font-bold text-slate-400 uppercase leading-snug">
+                          Especifique a distribuição de aulas (Sala vs Lab) para cada turma caso seja diferente do padrão.
+                        </p>
+                        {turmas.filter(t => !t.isRoom).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric: true})).map(turma => {
+                          // Se não houver customização, o valor no input mostra o padrão global mas permitir editar
+                          const custom = newSubjectCustomWorkloads[turma.id] || { 
+                            workload: newSubjectWorkload, 
+                            classWorkload: newSubjectClassWorkload, 
+                            labWorkload: newSubjectLabWorkload 
+                          };
+                          
+                          const isCustomized = !!newSubjectCustomWorkloads[turma.id];
+
+                          return (
+                            <div key={turma.id} className={`p-3 rounded-xl space-y-2 border ${isCustomized ? 'bg-white border-[#657c36]/30 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+                              <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-black text-slate-700 uppercase">{turma.name}</span>
+                                {isCustomized && (
+                                  <button 
+                                    onClick={() => {
+                                      const updated = { ...newSubjectCustomWorkloads };
+                                      delete updated[turma.id];
+                                      setNewSubjectCustomWorkloads(updated);
+                                    }}
+                                    className="text-[8px] font-bold text-red-500 uppercase hover:underline"
+                                  >
+                                    Remover Customização
+                                  </button>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                <div className="space-y-1">
+                                  <span className="text-[8px] font-black text-slate-400 uppercase">Total</span>
+                                  <input 
+                                    type="number"
+                                    value={custom.workload}
+                                    onChange={e => {
+                                      const val = parseInt(e.target.value) || 0;
+                                      setNewSubjectCustomWorkloads({
+                                        ...newSubjectCustomWorkloads,
+                                        [turma.id]: { ...custom, workload: val }
+                                      });
+                                    }}
+                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs font-bold"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-[8px] font-black text-slate-400 uppercase">Sala</span>
+                                  <input 
+                                    type="number"
+                                    value={custom.classWorkload}
+                                    onChange={e => setNewSubjectCustomWorkloads({
+                                      ...newSubjectCustomWorkloads,
+                                      [turma.id]: { ...custom, classWorkload: parseInt(e.target.value) || 0 }
+                                    })}
+                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs font-bold"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-[8px] font-black text-slate-400 uppercase">Lab</span>
+                                  <input 
+                                    type="number"
+                                    value={custom.labWorkload}
+                                    onChange={e => setNewSubjectCustomWorkloads({
+                                      ...newSubjectCustomWorkloads,
+                                      [turma.id]: { ...custom, labWorkload: parseInt(e.target.value) || 0 }
+                                    })}
+                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs font-bold"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={addSubject} 
+                    disabled={(newSubjectClassWorkload + newSubjectLabWorkload) > newSubjectWorkload}
+                    className={`w-full py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all ${((newSubjectClassWorkload + newSubjectLabWorkload) > newSubjectWorkload) ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : (editingSubjectId ? 'bg-[#657c36] text-white shadow-[#657c36]/20 shadow-lg' : 'bg-slate-900 text-white hover:bg-black shadow-xl')}`}
+                  >
+                    {editingSubjectId ? 'Atualizar Disciplina' : 'Adicionar Disciplina'}
+                  </button>
                 </div>
 
-                <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                <div className="max-h-52 overflow-y-auto space-y-2 pr-2 custom-scrollbar border-t border-slate-100 pt-4">
                   {subjects.map(subject => (
                     <div key={subject.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
                       <div className="flex flex-col transition-all">
                         <span className="text-xs font-black text-slate-800">{subject.name}</span>
-                        <div className="flex items-center gap-2">
-                           <span className="text-[9px] font-bold text-slate-400 uppercase">{subject.workload} aulas semanais</span>
-                           {selectedTurmaId && (
-                             <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black ${
-                               getWorkloadUsage(subject.id) >= subject.workload 
-                               ? 'bg-red-100 text-red-600' 
-                               : 'bg-green-100 text-green-600'
-                             }`}>
-                               Uso: {getWorkloadUsage(subject.id)}/{subject.workload}
-                             </span>
-                           )}
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                           <span className="text-[10px] font-bold text-slate-400 uppercase">{subject.workload} aulas</span>
+                           {subject.useLabComp && <span className="text-[8px] px-1 bg-green-50 text-green-700 rounded border border-green-100 font-bold">LAB COMP</span>}
+                           {subject.useLabTab && <span className="text-[8px] px-1 bg-emerald-50 text-emerald-700 rounded border border-emerald-100 font-bold">LAB TAB</span>}
+                           {subject.useSalaMat && <span className="text-[8px] px-1 bg-blue-50 text-blue-700 rounded border border-blue-100 font-bold">SALA MAT</span>}
+                           {(subject.labWorkload || 0) > 0 && <span className="text-[8px] text-slate-500 font-bold italic">{subject.labWorkload} lab / {subject.classWorkload} sala</span>}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => startEditSubject(subject)} 
-                          className="p-2 text-slate-300 hover:text-blue-500 transition-colors"
+                          className="p-2 text-slate-400 hover:text-blue-500 transition-colors"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button onClick={() => removeSubject(subject.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
+                        <button onClick={() => removeSubject(subject.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
