@@ -967,7 +967,7 @@ export default function ScheduleGenerator() {
       const currentTimeRanges = shift === 'manha' ? timeRangesManha : timeRangesTarde;
 
       return `
-        <div class="print-container">
+        <div class="print-container" style="page-break-after: always; break-after: page;">
           <div class="print-header">
             <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 2px;">
               ${logoUrl ? `<img src="${logoUrl}" style="height: 32px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
@@ -1082,12 +1082,10 @@ export default function ScheduleGenerator() {
               
               .print-container { 
                 page-break-after: always; 
+                break-after: page;
                 width: 100%;
                 height: auto;
-                min-height: 160mm;
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
+                display: block;
               }
               
               .print-header { text-align: center; margin-bottom: 2px; }
