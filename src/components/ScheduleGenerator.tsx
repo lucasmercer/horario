@@ -749,10 +749,10 @@ export default function ScheduleGenerator() {
       <div class="print-container">
         <div class="print-header">
           <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 5px;">
-            ${logoUrl ? `<img src="${logoUrl}" style="height: 50px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
+            ${logoUrl ? `<img src="${logoUrl}" style="height: 40px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
             <div style="text-align: left;">
-              <h1 style="font-size: 11pt; margin: 0; font-weight: 800; line-height: 1.2;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
-              <h2 style="font-size: 9pt; margin: 2px 0; color: #1e293b; font-weight: 700;">HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift === 'manha' ? 'MANHÃ' : 'TARDE'})</h2>
+              <h1 style="font-size: 10pt; margin: 0; font-weight: 800; line-height: 1.2;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
+              <h2 style="font-size: 8.5pt; margin: 2px 0; color: #1e293b; font-weight: 700;">HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift === 'manha' ? 'MANHÃ' : 'TARDE'})</h2>
             </div>
           </div>
         </div>
@@ -867,7 +867,7 @@ export default function ScheduleGenerator() {
                 return `
                   <tr style="${pIdx === 5 ? 'border-bottom: 1.5pt solid black;' : ''}">
                     ${pIdx === 0 ? `<td rowspan="7" style="border: 0.1pt solid black; background-color: #0f172a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: white; text-align: center; font-weight: 800; font-size: 6pt; width: 24px;"><span style="display: block; writing-mode: vertical-lr; transform: rotate(180deg); margin: 0 auto; letter-spacing: 0.05em;">${day.label}</span></td>` : ''}
-                    <td style="border: 0.1pt solid black; text-align: center; font-size: 6.5pt; font-weight: 800; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; height: 16pt;">${pIdx + 1}º</td>
+                    <td style="border: 0.1pt solid black; text-align: center; font-size: 6.5pt; font-weight: 800; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; height: 14pt;">${pIdx + 1}º</td>
                     <td style="border: 0.1pt solid black; text-align: center; font-size: 5.5pt; color: #64748b; font-weight: 600;">${timeRanges[pIdx]}</td>
                     ${specialRooms.map(room => {
                       const slot = schedules[room.id]?.[slotId];
@@ -876,10 +876,10 @@ export default function ScheduleGenerator() {
                       const turma = turmas.find(t => t.id === slot?.associatedTurmaId);
 
                       return `
-                        <td style="border: 0.1pt solid black; padding: 1px 2px; height: 16pt; vertical-align: middle; font-size: 6.5pt; text-align: left; overflow: hidden; white-space: nowrap;">
+                        <td style="border: 0.1pt solid black; padding: 1px 2px; height: 14pt; vertical-align: middle; font-size: 6.5pt; text-align: left; overflow: hidden; white-space: nowrap;">
                           ${teacher ? `
                             <div style="font-weight: 800; line-height: 1.1; font-size: 6.5pt; overflow: hidden; text-overflow: ellipsis;">${teacher.name}</div>
-                            <div style="font-weight: 700; color: #000; font-size: 6pt; text-transform: uppercase; border-left: 1pt solid #cbd5e1; padding-left: 2px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis;">
+                            <div style="font-weight: 700; color: #000; font-size: 5.5pt; text-transform: uppercase; border-left: 1pt solid #cbd5e1; padding-left: 2px; margin-top: 0px; overflow: hidden; text-overflow: ellipsis;">
                               ${turma?.name || ''} ${subject ? `<span style="font-weight: 400; color: #475569; font-size: 5.5pt; text-transform: none;">- ${subject.name}</span>` : ''}
                             </div>
                           ` : ''}
@@ -888,7 +888,7 @@ export default function ScheduleGenerator() {
                     }).join('')}
                   </tr>
                   ${pIdx === 2 ? `
-                    <tr style="height: 14pt; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <tr style="height: 11pt; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
                       <td colspan="2" style="border: 0.1pt solid black; text-align: center; font-size: 6pt; font-weight: 800; color: #64748b;">${shift === 'manha' ? '10:00 - 10:20' : '15:30 - 15:50'}</td>
                       <td colspan="${specialRooms.length + 1}" style="border: 0.1pt solid black; text-align: center; font-size: 7.5pt; font-weight: 800; color: #94a3b8; letter-spacing: 0.8em; text-transform: uppercase; padding: 0;">INTERVALO</td>
                     </tr>
@@ -930,12 +930,14 @@ export default function ScheduleGenerator() {
             <title>${title} - CECM</title>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
             <style>
-              @page { size: A4 landscape; margin: 0.5cm; }
+              @page { size: A4 landscape; margin: 0.15cm; }
               body { 
                 font-family: 'Inter', sans-serif; 
                 margin: 0; 
                 padding: 0; 
                 background: white; 
+                height: 210mm;
+                overflow: hidden;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
               }
@@ -1067,7 +1069,7 @@ export default function ScheduleGenerator() {
             <style>
               @page { 
                 size: A4 landscape; 
-                margin: 0.2cm; 
+                margin: 0.15cm; 
               }
               * { box-sizing: border-box; }
               body { 
@@ -1078,14 +1080,18 @@ export default function ScheduleGenerator() {
                 color: black;
                 -webkit-print-color-adjust: exact; 
                 print-color-adjust: exact; 
+                height: 210mm;
+                overflow: hidden;
               }
               
               .print-container { 
                 page-break-after: always; 
                 break-after: page;
                 width: 100%;
-                height: auto;
-                display: block;
+                height: 200mm;
+                display: flex;
+                flex-direction: column;
+                padding-bottom: 2mm;
               }
               
               .print-header { text-align: center; margin-bottom: 2px; }
@@ -1136,12 +1142,12 @@ export default function ScheduleGenerator() {
               
               .slot-cell { 
                 overflow: hidden;
-                height: 14pt; 
-                line-height: 1.1;
+                height: 12.5pt; 
+                line-height: 1;
               }
               
               .subj-name { 
-                font-size: 5pt; 
+                font-size: 4.5pt; 
                 font-weight: 800; 
                 color: black; 
                 text-transform: uppercase;
@@ -1151,7 +1157,7 @@ export default function ScheduleGenerator() {
               }
               
               .prof-name { 
-                font-size: 4.5pt; 
+                font-size: 4pt; 
                 color: #475569; 
                 line-height: 1;
                 white-space: nowrap;
@@ -1161,7 +1167,7 @@ export default function ScheduleGenerator() {
               .time-info { 
                 background-color: #f8fafc;
                 line-height: 1;
-                height: 14pt;
+                height: 12.5pt;
               }
               .p-num { display: block; font-size: 5.5pt; font-weight: 700; color: #2563eb; }
               .p-time { display: block; font-size: 4.5pt; font-weight: 400; color: #64748b; }
@@ -1214,33 +1220,42 @@ export default function ScheduleGenerator() {
             <title>${title} - CECM</title>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
             <style>
-              @page { size: A4 portrait; margin: 0.4cm; }
-              body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: white; }
+              @page { size: A4 portrait; margin: 0.25cm; }
+              body { 
+                font-family: 'Inter', sans-serif; 
+                margin: 0; 
+                padding: 0; 
+                background: white; 
+                height: 287mm;
+                overflow: hidden;
+              }
               .print-container { 
                 page-break-after: always; 
+                break-after: page;
                 width: 100%; 
+                height: 285mm;
                 display: flex; 
                 flex-direction: column; 
               }
-              .print-header { text-align: center; margin-bottom: 8px; border-bottom: 1.5pt solid black; padding-bottom: 4px; }
-              .print-header h1 { font-size: 11pt; margin: 0; font-weight: 800; }
-              .print-header h2 { font-size: 9pt; margin: 2px 0; color: #1e293b; font-weight: 700; }
-              .table-wrapper { border: 1pt solid black; margin-top: 4px; }
-              .grid-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-              th, td { border: 0.5pt solid black; padding: 3px 2px; text-align: center; vertical-align: middle; }
-              th { background: #f1f5f9; font-weight: 800; font-size: 7.5pt; }
-              .day-col { width: 25px; }
-              .period-col { width: 55px; }
-              .time-col { width: 85px; }
-              .day-cell { font-weight: 900; background: #f8fafc; font-size: 8pt; }
+              .print-header { text-align: center; margin-bottom: 4px; border-bottom: 1.2pt solid black; padding-bottom: 2px; }
+              .print-header h1 { font-size: 10pt; margin: 0; font-weight: 800; }
+              .print-header h2 { font-size: 8.5pt; margin: 1px 0; color: #1e293b; font-weight: 700; }
+              .table-wrapper { border: 0.8pt solid black; margin-top: 2px; flex: 1; overflow: hidden; }
+              .grid-table { width: 100%; border-collapse: collapse; table-layout: fixed; height: 100%; }
+              th, td { border: 0.4pt solid black; padding: 1px 2px; text-align: center; vertical-align: middle; }
+              th { background: #f1f5f9 !important; font-weight: 800; font-size: 7.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .day-col { width: 22px; }
+              .period-col { width: 50px; }
+              .time-col { width: 80px; }
+              .day-cell { font-weight: 900; background: #f8fafc !important; font-size: 7.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               .day-cell span { display: block; writing-mode: vertical-lr; transform: rotate(180deg); margin: 0 auto; }
-              .p-num-cell { font-weight: 700; color: #2563eb; font-size: 7pt; }
-              .p-time-cell { color: #64748b; font-size: 6.5pt; font-weight: 500; }
-              .slot-cell { text-align: left; padding-left: 8px; }
-              .subj-name { font-weight: 800; font-size: 8.5pt; text-transform: uppercase; margin-bottom: 0px; line-height: 1.1; }
-              .prof-name { font-size: 8.5pt; color: #475569; font-weight: 600; line-height: 1; }
-              .day-end { border-bottom: 1.5pt solid black; }
-              .print-footer { margin-top: 4px; text-align: right; font-size: 7.5pt; color: black; font-weight: 600; }
+              .p-num-cell { font-weight: 700; color: #2563eb !important; font-size: 6.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .p-time-cell { color: #64748b !important; font-size: 6pt; font-weight: 500; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .slot-cell { text-align: left; padding-left: 6px; overflow: hidden; }
+              .subj-name { font-weight: 800; font-size: 8pt; text-transform: uppercase; margin-bottom: 0px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+              .prof-name { font-size: 7.5pt; color: #475569 !important; font-weight: 600; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .day-end { border-bottom: 1.2pt solid black; }
+              .print-footer { margin-top: 3px; text-align: right; font-size: 6.5pt; color: black; font-weight: 600; }
             </style>
           </head>
           <body>
