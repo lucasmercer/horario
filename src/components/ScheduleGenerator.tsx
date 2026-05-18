@@ -867,8 +867,8 @@ export default function ScheduleGenerator() {
                 return `
                   <tr style="${pIdx === 5 ? 'border-bottom: 1.5pt solid black;' : ''}">
                     ${pIdx === 0 ? `<td rowspan="7" style="border: 0.1pt solid black; background-color: #0f172a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: white; text-align: center; font-weight: 800; font-size: 6pt; width: 24px;"><span style="display: block; writing-mode: vertical-lr; transform: rotate(180deg); margin: 0 auto; letter-spacing: 0.05em;">${day.label}</span></td>` : ''}
-                    <td style="border: 0.1pt solid black; text-align: center; font-size: 6pt; font-weight: 800; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; height: 11.5pt;">${pIdx + 1}º</td>
-                    <td style="border: 0.1pt solid black; text-align: center; font-size: 5pt; color: #64748b; font-weight: 600;">${timeRanges[pIdx]}</td>
+                    <td style="border: 0.1pt solid black; text-align: center; font-size: 6.5pt; font-weight: 800; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; height: 16pt;">${pIdx + 1}º</td>
+                    <td style="border: 0.1pt solid black; text-align: center; font-size: 5.5pt; color: #64748b; font-weight: 600;">${timeRanges[pIdx]}</td>
                     ${specialRooms.map(room => {
                       const slot = schedules[room.id]?.[slotId];
                       const teacher = teachers.find(t => t.id === slot?.teacherId);
@@ -876,11 +876,11 @@ export default function ScheduleGenerator() {
                       const turma = turmas.find(t => t.id === slot?.associatedTurmaId);
 
                       return `
-                        <td style="border: 0.1pt solid black; padding: 0.5px 1.5px; height: 11.5pt; vertical-align: middle; font-size: 6pt; text-align: left; overflow: hidden; white-space: nowrap;">
+                        <td style="border: 0.1pt solid black; padding: 1px 2px; height: 16pt; vertical-align: middle; font-size: 6.5pt; text-align: left; overflow: hidden; white-space: nowrap;">
                           ${teacher ? `
-                            <div style="font-weight: 800; line-height: 1; font-size: 6pt; overflow: hidden; text-overflow: ellipsis;">${teacher.name}</div>
-                            <div style="font-weight: 700; color: #000; font-size: 5.5pt; text-transform: uppercase; border-left: 1pt solid #cbd5e1; padding-left: 2px; margin-top: 0px; overflow: hidden; text-overflow: ellipsis;">
-                              ${turma?.name || ''} ${subject ? `<span style="font-weight: 400; color: #475569; font-size: 5pt; text-transform: none;">- ${subject.name}</span>` : ''}
+                            <div style="font-weight: 800; line-height: 1.1; font-size: 6.5pt; overflow: hidden; text-overflow: ellipsis;">${teacher.name}</div>
+                            <div style="font-weight: 700; color: #000; font-size: 6pt; text-transform: uppercase; border-left: 1pt solid #cbd5e1; padding-left: 2px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis;">
+                              ${turma?.name || ''} ${subject ? `<span style="font-weight: 400; color: #475569; font-size: 5.5pt; text-transform: none;">- ${subject.name}</span>` : ''}
                             </div>
                           ` : ''}
                         </td>
@@ -888,9 +888,9 @@ export default function ScheduleGenerator() {
                     }).join('')}
                   </tr>
                   ${pIdx === 2 ? `
-                    <tr style="height: 10pt; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    <tr style="height: 14pt; background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
                       <td colspan="2" style="border: 0.1pt solid black; text-align: center; font-size: 6pt; font-weight: 800; color: #64748b;">${shift === 'manha' ? '10:00 - 10:20' : '15:30 - 15:50'}</td>
-                      <td colspan="${specialRooms.length + 1}" style="border: 0.1pt solid black; text-align: center; font-size: 7pt; font-weight: 800; color: #94a3b8; letter-spacing: 0.8em; text-transform: uppercase; padding: 0;">INTERVALO</td>
+                      <td colspan="${specialRooms.length + 1}" style="border: 0.1pt solid black; text-align: center; font-size: 7.5pt; font-weight: 800; color: #94a3b8; letter-spacing: 0.8em; text-transform: uppercase; padding: 0;">INTERVALO</td>
                     </tr>
                   ` : ''}
                 `;
@@ -1136,12 +1136,12 @@ export default function ScheduleGenerator() {
               
               .slot-cell { 
                 overflow: hidden;
-                height: 10pt; 
-                line-height: 1;
+                height: 14pt; 
+                line-height: 1.1;
               }
               
               .subj-name { 
-                font-size: 4.5pt; 
+                font-size: 5pt; 
                 font-weight: 800; 
                 color: black; 
                 text-transform: uppercase;
@@ -1151,7 +1151,7 @@ export default function ScheduleGenerator() {
               }
               
               .prof-name { 
-                font-size: 4pt; 
+                font-size: 4.5pt; 
                 color: #475569; 
                 line-height: 1;
                 white-space: nowrap;
@@ -1160,11 +1160,11 @@ export default function ScheduleGenerator() {
               
               .time-info { 
                 background-color: #f8fafc;
-                line-height: 0.8;
-                height: 10pt;
+                line-height: 1;
+                height: 14pt;
               }
-              .p-num { display: block; font-size: 4.5pt; font-weight: 700; color: #2563eb; }
-              .p-time { display: block; font-size: 3.5pt; font-weight: 400; color: #64748b; }
+              .p-num { display: block; font-size: 5.5pt; font-weight: 700; color: #2563eb; }
+              .p-time { display: block; font-size: 4.5pt; font-weight: 400; color: #64748b; }
               
               .print-footer {
                 margin-top: 2px;
