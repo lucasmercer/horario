@@ -1563,13 +1563,13 @@ export default function ScheduleGenerator() {
             </div>
             
             <div className="flex-1 overflow-auto custom-scrollbar">
-              <table className="w-full border-collapse border-spacing-0 min-w-max">
+              <table className="w-full border-collapse border-spacing-0">
                 <thead>
                   <tr className="bg-slate-100 border-b-2 border-slate-900 sticky top-0 z-20">
                     <th className="bg-slate-100 sticky left-0 z-40 border-r-2 border-slate-900 w-10 min-w-[40px] max-w-[40px]"></th>
                     {viewMode === 'turmas' ? displayedTurmas.map(t => (
-                      <th key={t.id} className="p-0 border-r border-slate-300 text-xs font-black uppercase tracking-widest text-slate-900 min-w-[120px] bg-slate-100">
-                        <div className="flex items-center justify-between px-3 py-3 group">
+                      <th key={t.id} className="p-0 border-r border-slate-300 text-[10px] font-black uppercase tracking-tight text-slate-900 min-w-[80px] bg-slate-100">
+                        <div className="flex items-center justify-between px-2 py-3 group">
                           <span className="truncate">{t.name}</span>
                           <button 
                             onClick={(e) => {
@@ -1583,8 +1583,8 @@ export default function ScheduleGenerator() {
                         </div>
                       </th>
                     )) : turmas.filter(t => t.isRoom).map(t => (
-                      <th key={t.id} className="p-0 border-r border-slate-300 text-xs font-black uppercase tracking-widest text-slate-900 min-w-[150px] bg-indigo-50">
-                        <div className="flex items-center justify-between px-3 py-3 group">
+                      <th key={t.id} className="p-0 border-r border-slate-300 text-[10px] font-black uppercase tracking-tight text-slate-900 min-w-[100px] bg-indigo-50">
+                        <div className="flex items-center justify-between px-2 py-3 group">
                           <span className="truncate text-indigo-900">{t.name}</span>
                         </div>
                       </th>
