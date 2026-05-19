@@ -2894,7 +2894,7 @@ export default function ScheduleGenerator() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl w-full max-w-5xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+              className="bg-white rounded-3xl w-full max-w-[95vw] lg:max-w-7xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden"
             >
               {/* Modal Header */}
               <div className="p-6 pb-4 border-b border-slate-100 flex justify-between items-start bg-slate-50/50">
@@ -3134,21 +3134,21 @@ export default function ScheduleGenerator() {
                     if (sortedClassSubjects.length === 0) return null;
 
                     return (
-                      <div key={turma.id} className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all">
+                      <div key={turma.id} className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all">
                         {/* Turma summary row */}
-                        <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b border-slate-100 font-sans">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-slate-900 flex flex-col items-center justify-center text-white font-black">
-                              <span className="text-base leading-none">{turma.name}</span>
-                              <span className="text-[7px] font-bold uppercase tracking-tight text-slate-300 mt-0.5 font-sans">
+                        <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-2 border-b border-slate-100 font-sans">
+                          <div className="flex items-center gap-2">
+                            <div className="w-10 h-10 rounded-xl bg-slate-900 flex flex-col items-center justify-center text-white font-black shrink-0">
+                              <span className="text-sm leading-none">{turma.name}</span>
+                              <span className="text-[6px] font-bold uppercase tracking-tight text-slate-300 mt-0.5 font-sans">
                                 {turma.shift === 'manha' ? 'MAN' : 'TAR'}
                               </span>
                             </div>
                             <div>
-                              <h4 className="text-sm font-black text-slate-800 uppercase font-sans">
+                              <h4 className="text-xs font-black text-slate-800 uppercase font-sans leading-none">
                                 Turma {turma.name}
                               </h4>
-                              <div className="flex items-center gap-2 mt-0.5 text-[9px] font-bold text-slate-400 uppercase tracking-wider font-sans">
+                              <div className="flex items-center gap-1.5 mt-1 text-[8px] font-bold text-slate-400 uppercase tracking-wider font-sans leading-none">
                                 <span>{turma.shift === 'manha' ? 'Período da Manhã' : 'Período da Tarde'}</span>
                                 <span>•</span>
                                 <span className={classMissing > 0 ? 'text-amber-600 font-black' : 'text-green-600'}>
@@ -3159,12 +3159,12 @@ export default function ScheduleGenerator() {
                           </div>
 
                           {/* Class progress */}
-                          <div className="flex flex-col w-full sm:w-48">
-                            <div className="flex justify-between items-center text-[9px] font-black uppercase text-slate-500 mb-1">
+                          <div className="flex flex-col w-full sm:w-36">
+                            <div className="flex justify-between items-center text-[8px] font-black uppercase text-slate-500 mb-0.5">
                               <span>Distribuição</span>
                               <span>{classAllocated}/{classExpected} ({classCompletionRate}%)</span>
                             </div>
-                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                               <div 
                                 className={`h-full rounded-full transition-all duration-300 ${classCompletionRate === 100 ? 'bg-green-500' : 'bg-amber-500'}`}
                                 style={{ width: `${classCompletionRate}%` }}
@@ -3180,76 +3180,78 @@ export default function ScheduleGenerator() {
                               setViewMode('turmas');
                               setIsShowingMissingClasses(false);
                             }}
-                            className="px-4 py-2 bg-slate-100 hover:bg-slate-900 hover:text-white rounded-xl text-[10px] font-black text-slate-700 uppercase tracking-wider transition-all border border-transparent hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-900 hover:text-white rounded-lg text-[9px] font-black text-slate-700 uppercase tracking-wider transition-all border border-transparent hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
                           >
                             Ir para Grade
                           </button>
                         </div>
 
                         {/* Schedule detail cards inside this classroom */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
                           {sortedClassSubjects.map(({ subject, usage, total, missingCount, classroomUsage, labUsage }) => {
                             const isPending = missingCount > 0;
                             return (
                               <div 
                                 key={subject.id} 
-                                className={`p-3 rounded-xl border transition-all ${
+                                className={`p-2 rounded-xl border transition-all flex flex-col justify-between ${
                                   isPending 
-                                    ? 'bg-amber-50/40 border-amber-200/60 shadow-sm' 
-                                    : 'bg-slate-50/50 border-slate-100 opacity-70'
+                                    ? 'bg-amber-50/40 border-amber-200/50 shadow-xs' 
+                                    : 'bg-slate-50/50 border-slate-100 opacity-60'
                                 }`}
                               >
-                                <div className="flex justify-between items-start mb-1.5 flex-nowrap">
-                                  <span className="text-xs font-black text-slate-800 uppercase tracking-tighter truncate max-w-[130px] block font-sans" title={subject.name}>
-                                    {subject.name}
-                                  </span>
-                                  {isPending ? (
-                                    <span className="text-[8px] font-black bg-amber-500 text-white rounded px-1.5 py-0.5 uppercase tracking-wide">
-                                      -{missingCount} aula{missingCount > 1 ? 's' : ''}
+                                <div>
+                                  <div className="flex justify-between items-start gap-1 mb-1.5 flex-nowrap">
+                                    <span className="text-[10px] font-extrabold text-slate-800 uppercase tracking-tight truncate block font-sans" title={subject.name}>
+                                      {subject.name}
                                     </span>
-                                  ) : (
-                                    <span className="text-[8px] font-black bg-green-100 text-green-700 rounded px-1.5 py-0.5 uppercase tracking-wide">
-                                      OK
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="space-y-1.5">
-                                  {/* Subject progress indicator */}
-                                  <div className="flex justify-between text-[8px] font-bold text-slate-400 uppercase font-sans">
-                                    <span>Alocação</span>
-                                    <span>{usage} / {total} aulas</span>
-                                  </div>
-                                  <div className="w-full bg-slate-200/60 rounded-full h-1 overflow-hidden">
-                                    <div 
-                                      className={`h-full rounded-full ${isPending ? 'bg-amber-500' : 'bg-green-500'}`} 
-                                      style={{ width: `${Math.min(100, (usage / total) * 100)}%` }}
-                                    />
+                                    {isPending ? (
+                                      <span className="text-[7px] font-black bg-amber-500 text-white rounded px-1 py-0.5 uppercase tracking-wide shrink-0">
+                                        -{missingCount}a
+                                      </span>
+                                    ) : (
+                                      <span className="text-[7px] font-black bg-green-100 text-green-700 rounded px-1 py-0.5 uppercase tracking-wide shrink-0">
+                                        OK
+                                      </span>
+                                    )}
                                   </div>
 
-                                  {/* Special Room Specific Counts */}
-                                  {(subject.labWorkload !== undefined || subject.classWorkload !== undefined) && (
-                                    <div className="flex items-center gap-2 text-[7.5pt] text-slate-500 font-bold font-sans">
-                                      <span>Sala: {classroomUsage}/{subject.classWorkload || 0}</span>
-                                      <span>•</span>
-                                      <span>Lab: {labUsage}/{subject.labWorkload || 0}</span>
+                                  <div className="space-y-1">
+                                    {/* Subject progress indicator */}
+                                    <div className="flex justify-between text-[7.5px] font-bold text-slate-400 uppercase font-sans">
+                                      <span>Alocado</span>
+                                      <span>{usage}/{total}</span>
                                     </div>
-                                  )}
+                                    <div className="w-full bg-slate-200/60 rounded-full h-1 overflow-hidden">
+                                      <div 
+                                        className={`h-full rounded-full ${isPending ? 'bg-amber-500' : 'bg-green-500'}`} 
+                                        style={{ width: `${Math.min(100, (usage / total) * 100)}%` }}
+                                      />
+                                    </div>
 
-                                  {/* Arm and go to cell button */}
-                                  <button
-                                    id={`btn-load-subject-${turma.id}-${subject.id}`}
-                                    onClick={() => {
-                                      setSelectedTurmaId(turma.id);
-                                      setTempSubject(subject.id);
-                                      setViewMode('turmas');
-                                      setIsShowingMissingClasses(false);
-                                    }}
-                                    className="w-full mt-2 py-1 text-[8px] font-black text-center uppercase tracking-widest text-[#657c36] hover:bg-[#657c36] hover:text-white border border-[#657c36]/20 bg-white hover:border-transparent rounded-md transition-all shadow-sm cursor-pointer font-bold font-sans"
-                                  >
-                                    Carregar Matéria
-                                  </button>
+                                    {/* Special Room Specific Counts */}
+                                    {(subject.labWorkload !== undefined || subject.classWorkload !== undefined) && (
+                                      <div className="flex items-center gap-1 text-[7px] text-slate-400 font-bold font-sans">
+                                        <span>S: {classroomUsage}/{subject.classWorkload || 0}</span>
+                                        <span>•</span>
+                                        <span>L: {labUsage}/{subject.labWorkload || 0}</span>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
+
+                                {/* Arm and go to cell button */}
+                                <button
+                                  id={`btn-load-subject-${turma.id}-${subject.id}`}
+                                  onClick={() => {
+                                    setSelectedTurmaId(turma.id);
+                                    setTempSubject(subject.id);
+                                    setViewMode('turmas');
+                                    setIsShowingMissingClasses(false);
+                                  }}
+                                  className="w-full mt-2 py-0.5 text-[8px] font-extrabold text-center uppercase tracking-wider text-[#657c36] hover:bg-[#657c36] hover:text-white border border-[#657c36]/20 bg-white hover:border-transparent rounded-md transition-all shadow-xs cursor-pointer font-sans"
+                                >
+                                  Carregar
+                                </button>
                               </div>
                             );
                           })}
