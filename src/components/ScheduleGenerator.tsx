@@ -1055,13 +1055,14 @@ export default function ScheduleGenerator() {
             <title>${title} - CECM</title>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
             <style>
-              @page { size: A4 landscape; margin: 0.15cm; }
+              @page { size: A4 landscape; margin: 7mm; }
+              * { box-sizing: border-box; }
               body { 
                 font-family: 'Inter', sans-serif; 
                 margin: 0; 
-                padding: 7px; 
+                padding: 0; 
                 background: white; 
-                height: 210mm;
+                height: 100%;
                 overflow: hidden;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
@@ -1194,18 +1195,18 @@ export default function ScheduleGenerator() {
             <style>
               @page { 
                 size: A4 landscape; 
-                margin: 0.15cm; 
+                margin: 7mm; 
               }
               * { box-sizing: border-box; }
               body { 
                 font-family: 'Inter', sans-serif; 
                 margin: 0; 
-                padding: 7px; 
+                padding: 0; 
                 background: white; 
                 color: black;
                 -webkit-print-color-adjust: exact; 
                 print-color-adjust: exact; 
-                height: 210mm;
+                height: 100%;
                 overflow: hidden;
               }
               
@@ -1343,13 +1344,14 @@ export default function ScheduleGenerator() {
             <title>${title} - CECM</title>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
             <style>
-              @page { size: A4 portrait; margin: 0.25cm; }
+              @page { size: A4 portrait; margin: 7mm; }
+              * { box-sizing: border-box; }
               body { 
                 font-family: 'Inter', sans-serif; 
                 margin: 0; 
-                padding: 7px; 
+                padding: 0; 
                 background: white; 
-                height: 287mm;
+                height: 100%;
                 overflow: hidden;
               }
               .print-container { 
