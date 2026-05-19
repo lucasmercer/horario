@@ -83,7 +83,7 @@ export default function ScheduleGenerator() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [schedules, setSchedules] = useState<AllSchedules>({});
-  const [version, setVersion] = useState<number>(10);
+  const [version, setVersion] = useState<number>(67);
   const [logoUrl, setLogoUrl] = useState<string>('http://lucasleniar.com.br/mint/civico.png');
   const [showLogoInput, setShowLogoInput] = useState(false);
   const [tempLogoUrl, setTempLogoUrl] = useState('');
@@ -187,7 +187,12 @@ export default function ScheduleGenerator() {
     if (savedLogo) setLogoUrl(savedLogo);
     
     const savedVersion = localStorage.getItem('cecm_version');
-    if (savedVersion) setVersion(parseInt(savedVersion));
+    if (savedVersion) {
+      const v = parseInt(savedVersion);
+      setVersion(v < 67 ? 67 : v);
+    } else {
+      setVersion(67);
+    }
 
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -266,7 +271,12 @@ export default function ScheduleGenerator() {
       if (savedLogo) setLogoUrl(savedLogo);
       
       const savedVersion = localStorage.getItem('cecm_version');
-      if (savedVersion) setVersion(parseInt(savedVersion));
+      if (savedVersion) {
+        const v = parseInt(savedVersion);
+        setVersion(v < 67 ? 67 : v);
+      } else {
+        setVersion(67);
+      }
 
       if (savedTurmas) {
         let parsedTurmas = JSON.parse(savedTurmas);
