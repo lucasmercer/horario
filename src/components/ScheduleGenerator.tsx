@@ -130,8 +130,40 @@ export default function ScheduleGenerator() {
   // Filter turmas for the interactive grid - let's show all by default unless we really need filtering
   // The user complained about missing "middle" classes, so showing all might be safer
   // or at least ensure the ones without shift show up correctly.
-  const displayedTurmas = turmas
-    .filter(t => {
+  
+  const getTurmaSortWeight = (name: string) => {
+    const n = name.toUpperCase();
+    const match = n.match(/(\d+)/);
+    if (!match) return 9999;
+    
+    const num = parseInt(match[1]);
+    let base = num * 100;
+    
+    // Prioridade: 6, 7, 8, 9, depois 1, 2, 3
+    if (num >= 6 && num <= 9) {
+      base = num * 100; // 600 - 900
+    } else if (num >= 1 && num <= 3) {
+      base = (num + 9) * 100; // 1000 - 1200
+    }
+    
+    const suffix = n.split(match[1])[1] || "";
+    const firstLetterMatch = suffix.match(/[A-Z]/);
+    const letterWeight = firstLetterMatch ? firstLetterMatch[0].charCodeAt(0) : 0;
+    
+    return base + letterWeight;
+  };
+
+  const sortTurmasList = (list: Turma[]) => {
+    return [...list].sort((a, b) => {
+      const wa = getTurmaSortWeight(a.name);
+      const wb = getTurmaSortWeight(b.name);
+      if (wa !== wb) return wa - wb;
+      return a.name.localeCompare(b.name, undefined, { numeric: true });
+    });
+  };
+
+  const displayedTurmas = sortTurmasList(
+    turmas.filter(t => {
       // Excluir as turmas virtuais das salas das listagens normais
       if (t.isRoom) return false;
       
@@ -140,7 +172,7 @@ export default function ScheduleGenerator() {
       const isNamedTarde = t.name.toLowerCase().includes('tarde');
       return importShift === 'manha' ? !isNamedTarde : isNamedTarde;
     })
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  );
 
   // Initialize version and logo on mount
   useEffect(() => {
@@ -480,6 +512,17 @@ export default function ScheduleGenerator() {
   const addSubject = () => {
     if (!newSubjectName.trim()) return;
     
+    // Validação de duplicidade de nome
+    const nameExists = subjects.some(s => 
+      s.name.trim().toLowerCase() === newSubjectName.trim().toLowerCase() && 
+      s.id !== editingSubjectId
+    );
+
+    if (nameExists) {
+      alert(`Erro: Já existe uma disciplina cadastrada com o nome "${newSubjectName}".`);
+      return;
+    }
+
     // Validação: Carga em sala + Carga em Lab/Especial não pode ser maior que Carga Total
     if ((newSubjectClassWorkload + newSubjectLabWorkload) > newSubjectWorkload) {
       alert(`Erro: A soma das aulas em sala (${newSubjectClassWorkload}) e aulas em laboratório/especial (${newSubjectLabWorkload}) não pode ser maior que a carga horária total da disciplina (${newSubjectWorkload}).`);
@@ -584,6 +627,18 @@ export default function ScheduleGenerator() {
   const addTurma = () => {
     if (!newTurmaName.trim()) return;
     
+    // Validação de duplicidade de nome
+    const nameExists = turmas.some(t => 
+      !t.isRoom &&
+      t.name.trim().toLowerCase() === newTurmaName.trim().toLowerCase() && 
+      t.id !== editingTurmaId
+    );
+
+    if (nameExists) {
+      alert(`Erro: Já existe uma turma cadastrada com o nome "${newTurmaName}".`);
+      return;
+    }
+
     if (editingTurmaId) {
       setTurmas(prev => prev.map(t => t.id === editingTurmaId 
         ? { ...t, name: newTurmaName, shift: newTurmaShift } 
@@ -957,8 +1012,8 @@ export default function ScheduleGenerator() {
   const handlePrintGeralTurmas = () => {
     // Less aggressive filtering for printing
     const filteredTurmas = turmas.filter(t => !t.isRoom);
-    const manhaTurmas = filteredTurmas.filter(t => t.shift === 'manha' || (!t.shift && !t.name.toLowerCase().includes('tarde'))).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-    const tardeTurmas = filteredTurmas.filter(t => t.shift === 'tarde' || (!t.shift && t.name.toLowerCase().includes('tarde'))).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    const manhaTurmas = sortTurmasList(filteredTurmas.filter(t => t.shift === 'manha' || (!t.shift && !t.name.toLowerCase().includes('tarde'))));
+    const tardeTurmas = sortTurmasList(filteredTurmas.filter(t => t.shift === 'tarde' || (!t.shift && t.name.toLowerCase().includes('tarde'))));
     
     const generateScheduleTable = (shiftTurmas: Turma[], shift: 'manha' | 'tarde') => {
       if (shiftTurmas.length === 0) return '';
@@ -1142,23 +1197,23 @@ export default function ScheduleGenerator() {
               
               .slot-cell { 
                 overflow: hidden;
-                height: 12.5pt; 
-                line-height: 1;
+                height: 16pt; 
+                line-height: 1.1;
               }
               
               .subj-name { 
-                font-size: 4.5pt; 
+                font-size: 6pt; 
                 font-weight: 800; 
                 color: black; 
                 text-transform: uppercase;
-                line-height: 1;
+                line-height: 1.1;
                 white-space: nowrap;
                 overflow: hidden;
               }
               
               .prof-name { 
-                font-size: 4pt; 
-                color: #475569; 
+                font-size: 5.5pt; 
+                color: black; 
                 line-height: 1;
                 white-space: nowrap;
                 overflow: hidden;
@@ -1167,10 +1222,10 @@ export default function ScheduleGenerator() {
               .time-info { 
                 background-color: #f8fafc;
                 line-height: 1;
-                height: 12.5pt;
+                height: 16pt;
               }
-              .p-num { display: block; font-size: 5.5pt; font-weight: 700; color: #2563eb; }
-              .p-time { display: block; font-size: 4.5pt; font-weight: 400; color: #64748b; }
+              .p-num { display: block; font-size: 6.5pt; font-weight: 700; color: #2563eb; }
+              .p-time { display: block; font-size: 5pt; font-weight: 400; color: #64748b; }
               
               .print-footer {
                 margin-top: 2px;
@@ -1202,9 +1257,7 @@ export default function ScheduleGenerator() {
   };
 
   const handlePrintAllTurmasIndividual = () => {
-    const html = turmas
-      .filter(t => !t.isRoom)
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    const html = sortTurmasList(turmas.filter(t => !t.isRoom))
       .map(t => handlePrintSingleTurma(t))
       .join('');
     
@@ -1253,7 +1306,7 @@ export default function ScheduleGenerator() {
               .p-time-cell { color: #64748b !important; font-size: 6pt; font-weight: 500; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               .slot-cell { text-align: left; padding-left: 6px; overflow: hidden; }
               .subj-name { font-weight: 800; font-size: 8pt; text-transform: uppercase; margin-bottom: 0px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-              .prof-name { font-size: 7.5pt; color: #475569 !important; font-weight: 600; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .prof-name { font-size: 7.5pt; color: black !important; font-weight: 600; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               .day-end { border-bottom: 1.2pt solid black; }
               .print-footer { margin-top: 3px; text-align: right; font-size: 6.5pt; color: black; font-weight: 600; }
             </style>
@@ -1695,7 +1748,7 @@ export default function ScheduleGenerator() {
                       className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 transition-all"
                     >
                       <option value="">Selecionar Turma</option>
-                      {turmas.filter(t => !t.isRoom).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric: true})).map(t => (
+                {sortTurmasList(turmas.filter(t => !t.isRoom)).map(t => (
                         <option key={t.id} value={t.id}>{t.name}</option>
                       ))}
                     </select>
@@ -1930,10 +1983,7 @@ export default function ScheduleGenerator() {
                 
                 <div className="col-span-2 h-px bg-slate-100 my-2" />
 
-                {turmas
-                  .filter(t => !t.isRoom)
-                  .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-                  .map(turma => (
+                {sortTurmasList(turmas.filter(t => !t.isRoom)).map(turma => (
                   <button 
                     key={turma.id}
                     onClick={() => handlePrintTurmaSelection(turma)}
@@ -1999,10 +2049,7 @@ export default function ScheduleGenerator() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pb-2">
-                  {turmas
-                    .filter(t => !t.isRoom)
-                    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-                    .map(turma => (
+                  {sortTurmasList(turmas.filter(t => !t.isRoom)).map(turma => (
                     <button 
                       key={turma.id}
                       onClick={() => {
@@ -2086,10 +2133,7 @@ export default function ScheduleGenerator() {
                 </div>
 
                 <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                  {turmas
-                    .filter(t => !t.isRoom)
-                    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-                    .map(turma => (
+                  {sortTurmasList(turmas.filter(t => !t.isRoom)).map(turma => (
                     <div key={turma.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
                       <div className="flex flex-col">
                         <span className="text-xs font-black text-slate-800">{turma.name}</span>
