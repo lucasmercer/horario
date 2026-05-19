@@ -123,6 +123,10 @@ export default function ScheduleGenerator() {
   const [newRoomColor, setNewRoomColor] = useState('#6366f1');
   const [isPrintingTurmaSelection, setIsPrintingTurmaSelection] = useState(false);
   const [isClearingSelection, setIsClearingSelection] = useState(false);
+  const [isShowingMissingClasses, setIsShowingMissingClasses] = useState(false);
+  const [missingClassesSearch, setMissingClassesSearch] = useState('');
+  const [missingClassesShift, setMissingClassesShift] = useState<'todos' | 'manha' | 'tarde'>('todos');
+  const [missingClassesOnlyPending, setMissingClassesOnlyPending] = useState(true);
   const [newTurmaName, setNewTurmaName] = useState('');
   const [newTurmaShift, setNewTurmaShift] = useState<'manha' | 'tarde'>('manha');
   const [editingTurmaId, setEditingTurmaId] = useState<string | null>(null);
@@ -190,6 +194,7 @@ export default function ScheduleGenerator() {
         setIsAddingTurma(false);
         setIsPrintingTurmaSelection(false);
         setIsClearingSelection(false);
+        setIsShowingMissingClasses(false);
         setSelectedSlot(null);
         setEditingTeacherId(null);
         setEditingSubjectId(null);
@@ -863,6 +868,38 @@ export default function ScheduleGenerator() {
     };
   };
 
+  const getClassSubjectWorkload = (turmaId: string, subjectId: string) => {
+    const subject = subjects.find(s => s.id === subjectId);
+    if (!subject) return { usage: 0, total: 0, classroomUsage: 0, labUsage: 0, classroomTotal: 0, labTotal: 0 };
+
+    const classroomSchedule = schedules[turmaId] || {};
+    const classroomUsage = Object.values(classroomSchedule).filter((slot: ScheduleSlot) => slot.subjectId === subjectId).length;
+
+    let labUsage = 0;
+    Object.keys(schedules).forEach(rid => {
+      const room = turmas.find(t => t.id === rid);
+      if (room && room.isRoom) {
+        labUsage += Object.values(schedules[rid] || {}).filter((slot: ScheduleSlot) => 
+          slot.subjectId === subjectId && slot.associatedTurmaId === turmaId
+        ).length;
+      }
+    });
+
+    const custom = subject.customWorkloads?.[turmaId];
+    const total = custom ? custom.workload : subject.workload;
+    const cTotal = custom ? custom.classWorkload : (subject.classWorkload || 0);
+    const lTotal = custom ? custom.labWorkload : (subject.labWorkload || 0);
+
+    return { 
+      usage: classroomUsage + labUsage, 
+      total,
+      classroomUsage,
+      classroomTotal: cTotal,
+      labUsage,
+      labTotal: lTotal
+    };
+  };
+
   const handlePrintSingleTurma = (turma: Turma) => {
     const shift = turma.shift || (turma.name.toLowerCase().includes('tarde') ? 'tarde' : 'manha');
     const currentPeriods = shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
@@ -1154,10 +1191,10 @@ export default function ScheduleGenerator() {
                         </td>
                       </tr>
                       ${pIndex === 2 ? `
-                        <tr class="interval-row" style="height: 6pt;">
-                          ${shiftTurmas.map(() => `<td class="slot-cell" style="background: #f8fafc; text-align: center; font-size: 4pt; font-weight: 800; color: #94a3b8; height: 6pt; padding: 0;">INTERVALO</td>`).join('')}
-                          <td class="time-info" style="background: #f1f5f9; padding: 0; height: 6pt;">
-                            <span class="p-time" style="font-size: 3.5pt; font-weight: 800; color: #64748b; line-height: 1;">${shift === 'manha' ? '10h-10h20' : '15h30-15h50'}</span>
+                        <tr class="interval-row" style="height: 5pt;">
+                          ${shiftTurmas.map(() => `<td class="slot-cell" style="background: #f8fafc; text-align: center; font-size: 3.5pt; font-weight: 800; color: #94a3b8; height: 5pt; padding: 0;">INTERVALO</td>`).join('')}
+                          <td class="time-info" style="background: #f1f5f9; padding: 0; height: 5pt;">
+                            <span class="p-time" style="font-size: 3pt; font-weight: 800; color: #64748b; line-height: 1;">${shift === 'manha' ? '10h-10h20' : '15h30-15h50'}</span>
                           </td>
                         </tr>
                       ` : ''}
@@ -1168,14 +1205,14 @@ export default function ScheduleGenerator() {
             </table>
           </div>
           
-          <div class="print-footer" style="display: flex; flex-direction: column; align-items: center; gap: 0px; margin-top: 3px;">
-            <div style="font-weight: 800; font-size: 7pt; color: #0f172a;">
+          <div class="print-footer" style="display: flex; flex-direction: column; align-items: center; gap: 0px; margin-top: 1px;">
+            <div style="font-weight: 800; font-size: 6.5pt; color: #0f172a;">
               Sistema feito por: Prof. Lucas Mercer Leniar
-              <span style="font-size: 5.5pt; color: #64748b; font-weight: normal; margin-left: 8px;">
+              <span style="font-size: 5pt; color: #64748b; font-weight: normal; margin-left: 8px;">
                 - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - Atualização de Grade
               </span>
             </div>
-            <div style="font-size: 5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px; page-break-inside: avoid;">www.LucasLeniar.com.br</div>
+            <div style="font-size: 4.5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px; page-break-inside: avoid;">www.LucasLeniar.com.br</div>
           </div>
         </div>
       `;
@@ -1195,7 +1232,7 @@ export default function ScheduleGenerator() {
             <style>
               @page { 
                 size: A4 landscape; 
-                margin: 7mm; 
+                margin: 4mm; 
               }
               * { box-sizing: border-box; }
               body { 
@@ -1214,7 +1251,7 @@ export default function ScheduleGenerator() {
                 page-break-after: always; 
                 break-after: page;
                 width: 100%;
-                height: 190mm;
+                height: 192mm;
                 display: flex;
                 flex-direction: column;
                 padding-bottom: 0mm;
@@ -1225,7 +1262,6 @@ export default function ScheduleGenerator() {
               .table-wrapper {
                 flex: 1;
                 width: 100%;
-                overflow: hidden;
                 border: 0.8pt solid black;
               }
               
@@ -1268,12 +1304,12 @@ export default function ScheduleGenerator() {
               
               .slot-cell { 
                 overflow: hidden;
-                height: 14.2pt; 
+                height: 12.5pt; 
                 line-height: 1;
               }
               
               .subj-name { 
-                font-size: 5.5pt; 
+                font-size: 5pt; 
                 font-weight: 800; 
                 color: black; 
                 text-transform: uppercase;
@@ -1283,7 +1319,7 @@ export default function ScheduleGenerator() {
               }
               
               .prof-name { 
-                font-size: 5pt; 
+                font-size: 4.5pt; 
                 color: black; 
                 line-height: 1;
                 white-space: nowrap;
@@ -1293,10 +1329,10 @@ export default function ScheduleGenerator() {
               .time-info { 
                 background-color: #f8fafc;
                 line-height: 1;
-                height: 16pt;
+                height: 12.5pt;
               }
-              .p-num { display: block; font-size: 6.5pt; font-weight: 700; color: #2563eb; }
-              .p-time { display: block; font-size: 5pt; font-weight: 400; color: #64748b; }
+              .p-num { display: block; font-size: 5.5pt; font-weight: 700; color: #2563eb; }
+              .p-time { display: block; font-size: 4.2pt; font-weight: 400; color: #64748b; }
               
               .print-footer {
                 margin-top: 1px;
@@ -1366,7 +1402,7 @@ export default function ScheduleGenerator() {
               .print-header { text-align: center; margin-bottom: 4px; border-bottom: 1.2pt solid black; padding-bottom: 2px; }
               .print-header h1 { font-size: 10pt; margin: 0; font-weight: 800; }
               .print-header h2 { font-size: 8.5pt; margin: 1px 0; color: #1e293b; font-weight: 700; }
-              .table-wrapper { border: 0.8pt solid black; margin-top: 2px; flex: 1; overflow: hidden; }
+              .table-wrapper { border: 0.8pt solid black; margin-top: 2px; flex: 1; }
               .grid-table { width: 100%; border-collapse: collapse; table-layout: fixed; height: 100%; }
               th, td { border: 0.4pt solid black; padding: 1px 2px; text-align: center; vertical-align: middle; }
               th { background: #f1f5f9 !important; font-weight: 800; font-size: 7.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1455,7 +1491,7 @@ export default function ScheduleGenerator() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 justify-end w-full sm:w-auto ml-auto">
              {/* Logo Action Component */}
              <div className="relative">
               {showLogoInput ? (
@@ -1496,6 +1532,17 @@ export default function ScheduleGenerator() {
                 </button>
               )}
             </div>
+
+            {/* Botão Aulas Faltantes ao lado de Logo Escola */}
+            <button 
+              id="btn-missing-classes-header"
+              onClick={() => setIsShowingMissingClasses(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-2 border-amber-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-amber-800 hover:border-amber-500 hover:bg-amber-100 transition-all shadow-sm"
+              title="Verificar Aulas Faltantes"
+            >
+              <AlertCircle className="w-4 h-4 text-amber-600 animate-pulse" />
+              Aulas Faltantes
+            </button>
 
             <button 
               onClick={handleSave}
@@ -2836,6 +2883,393 @@ export default function ScheduleGenerator() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {isShowingMissingClasses && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl w-full max-w-5xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="p-6 pb-4 border-b border-slate-100 flex justify-between items-start bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500 text-white rounded-2xl shadow-lg shadow-amber-500/20">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 uppercase">
+                      Diagnóstico de Aulas Faltantes
+                    </h3>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">
+                      Acompanhe quais aulas ainda precisam ser distribuídas por turma
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  id="btn-close-missing-classes-header"
+                  onClick={() => setIsShowingMissingClasses(false)} 
+                  className="p-2 bg-white border border-slate-200 rounded-full hover:bg-slate-50 text-slate-500 transition-colors shadow-sm cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Status Banner / Metrics Dashboard */}
+              <div className="px-6 py-4 bg-white border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4">
+                {(() => {
+                  let overallExpected = 0;
+                  let overallAllocated = 0;
+                  const normalTurmas = turmas.filter(t => !t.isRoom);
+
+                  normalTurmas.forEach(t => {
+                    subjects.forEach(s => {
+                      const { total, usage } = getClassSubjectWorkload(t.id, s.id);
+                      overallExpected += total;
+                      overallAllocated += usage;
+                    });
+                  });
+
+                  const overallMissing = Math.max(0, overallExpected - overallAllocated);
+                  const overallCompletion = overallExpected > 0 ? Math.round((overallAllocated / overallExpected) * 100) : 0;
+
+                  return (
+                    <>
+                      <div className="bg-slate-50 p-3.5 rounded-2xl flex flex-col">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Aulas Esperadas</span>
+                        <span className="text-2xl font-black text-slate-800 leading-tight mt-1">{overallExpected}</span>
+                      </div>
+                      <div className="bg-slate-50 p-3.5 rounded-2xl flex flex-col">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Aulas Distribuídas</span>
+                        <span className="text-xl font-black text-green-600 leading-tight mt-1 flex items-center gap-1.5">
+                          {overallAllocated}
+                          <span className="text-xs font-bold text-slate-400 font-mono">({overallCompletion}%)</span>
+                        </span>
+                      </div>
+                      <div className="bg-slate-50 p-3.5 rounded-2xl flex flex-col">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Aulas Faltantes</span>
+                        <span className="text-2xl font-black text-rose-600 leading-tight mt-1">
+                          {overallMissing}
+                        </span>
+                      </div>
+                      <div className="bg-slate-50 p-3.5 rounded-2xl flex flex-col justify-center">
+                        <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                          <div 
+                            className="bg-green-500 h-full rounded-full transition-all duration-500" 
+                            style={{ width: `${overallCompletion}%` }}
+                          />
+                        </div>
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-2 text-right">
+                          {overallCompletion}% Concluído
+                        </span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Advanced Search & Filtering Controls */}
+              <div className="p-4 px-6 bg-slate-50 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                  {/* Shift Selection tabs */}
+                  <div className="flex bg-slate-200/60 p-1 rounded-xl items-center gap-1">
+                    <button
+                      id="btn-missing-classes-shift-all"
+                      onClick={() => setMissingClassesShift('todos')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all cursor-pointer ${missingClassesShift === 'todos' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      Todos
+                    </button>
+                    <button
+                      id="btn-missing-classes-shift-manha"
+                      onClick={() => setMissingClassesShift('manha')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all cursor-pointer ${missingClassesShift === 'manha' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      Manhã
+                    </button>
+                    <button
+                      id="btn-missing-classes-shift-tarde"
+                      onClick={() => setMissingClassesShift('tarde')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all cursor-pointer ${missingClassesShift === 'tarde' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      Tarde
+                    </button>
+                  </div>
+
+                  {/* Toggle only pending */}
+                  <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-all shadow-sm">
+                    <input 
+                      id="chk-missing-classes-only-pending"
+                      type="checkbox"
+                      checked={missingClassesOnlyPending}
+                      onChange={e => setMissingClassesOnlyPending(e.target.checked)}
+                      className="w-3.5 h-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-[10px] font-bold text-slate-700 uppercase tracking-tight select-none">
+                      Mostrar apenas pendências
+                    </span>
+                  </label>
+                </div>
+
+                {/* Search Text Input */}
+                <div className="relative w-full md:w-72">
+                  <input
+                    id="input-missing-classes-search"
+                    type="text"
+                    value={missingClassesSearch}
+                    onChange={e => setMissingClassesSearch(e.target.value)}
+                    placeholder="Buscar por turma ou disciplina..."
+                    className="w-full pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-800 transition-all shadow-sm"
+                  />
+                  {missingClassesSearch && (
+                    <button 
+                      id="btn-clear-missing-search"
+                      onClick={() => setMissingClassesSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Main List Area */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/20 custom-scrollbar">
+                {(() => {
+                  let filteredTurmas = turmas.filter(t => !t.isRoom);
+
+                  // Apply shift filters
+                  if (missingClassesShift === 'manha') {
+                    filteredTurmas = filteredTurmas.filter(t => {
+                      if (t.shift) return t.shift === 'manha';
+                      return !t.name.toLowerCase().includes('tarde');
+                    });
+                  } else if (missingClassesShift === 'tarde') {
+                    filteredTurmas = filteredTurmas.filter(t => {
+                      if (t.shift) return t.shift === 'tarde';
+                      return t.name.toLowerCase().includes('tarde');
+                    });
+                  }
+
+                  // Apply search term
+                  if (missingClassesSearch.trim()) {
+                    const searchLower = missingClassesSearch.toLowerCase();
+                    filteredTurmas = filteredTurmas.filter(t => {
+                      const matchesTurma = t.name.toLowerCase().includes(searchLower);
+                      const matchesSubject = subjects.some(s => {
+                        const hasThisSubject = s.customWorkloads?.[t.id] ? s.customWorkloads[t.id].workload > 0 : s.workload > 0;
+                        return hasThisSubject && s.name.toLowerCase().includes(searchLower);
+                      });
+                      return matchesTurma || matchesSubject;
+                    });
+                  }
+
+                  // Apply Only Pending filter to classrooms list
+                  if (missingClassesOnlyPending) {
+                    filteredTurmas = filteredTurmas.filter(t => {
+                      return subjects.some(s => {
+                        const { usage, total } = getClassSubjectWorkload(t.id, s.id);
+                        return total > 0 && usage < total;
+                      });
+                    });
+                  }
+
+                  if (filteredTurmas.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <CheckCircle2 className="w-12 h-12 text-green-500 mb-3" />
+                        <span className="text-sm font-black text-slate-800 uppercase">Tudo em Ordem!</span>
+                        <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                          Nenhuma pendência encontrada com as opções selecionadas. Todas as turmas estão com a grade totalmente alocada!
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  // Sort turmas cleanly and render
+                  return sortTurmasList(filteredTurmas).map(turma => {
+                    // Let's compute statistics for this class
+                    let classExpected = 0;
+                    let classAllocated = 0;
+                    
+                    const classSubjects = subjects.map(s => {
+                      const { usage, total, classroomUsage, labUsage } = getClassSubjectWorkload(turma.id, s.id);
+                      const missingCount = Math.max(0, total - usage);
+                      if (total > 0) {
+                        classExpected += total;
+                        classAllocated += usage;
+                      }
+                      return {
+                        subject: s,
+                        usage,
+                        total,
+                        classroomUsage,
+                        labUsage,
+                        missingCount
+                      };
+                    }).filter(item => item.total > 0);
+
+                    // Sort subjects of class: place pending ones pointing on top!
+                    const sortedClassSubjects = [...classSubjects]
+                      .filter(item => {
+                        if (missingClassesSearch.trim()) {
+                          return item.subject.name.toLowerCase().includes(missingClassesSearch.toLowerCase());
+                        }
+                        return true;
+                      })
+                      .sort((a,b) => {
+                        if (a.missingCount > 0 && b.missingCount === 0) return -1;
+                        if (a.missingCount === 0 && b.missingCount > 0) return 1;
+                        return a.subject.name.localeCompare(b.subject.name);
+                      });
+
+                    const classMissing = Math.max(0, classExpected - classAllocated);
+                    const classCompletionRate = classExpected > 0 ? Math.round((classAllocated / classExpected) * 100) : 0;
+
+                    if (sortedClassSubjects.length === 0) return null;
+
+                    return (
+                      <div key={turma.id} className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all">
+                        {/* Turma summary row */}
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-3 border-b border-slate-100 font-sans">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-slate-900 flex flex-col items-center justify-center text-white font-black">
+                              <span className="text-base leading-none">{turma.name}</span>
+                              <span className="text-[7px] font-bold uppercase tracking-tight text-slate-300 mt-0.5 font-sans">
+                                {turma.shift === 'manha' ? 'MAN' : 'TAR'}
+                              </span>
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-black text-slate-800 uppercase font-sans">
+                                Turma {turma.name}
+                              </h4>
+                              <div className="flex items-center gap-2 mt-0.5 text-[9px] font-bold text-slate-400 uppercase tracking-wider font-sans">
+                                <span>{turma.shift === 'manha' ? 'Período da Manhã' : 'Período da Tarde'}</span>
+                                <span>•</span>
+                                <span className={classMissing > 0 ? 'text-amber-600 font-black' : 'text-green-600'}>
+                                  {classMissing > 0 ? `Faltam ${classMissing} aulas` : 'Grade Completa'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Class progress */}
+                          <div className="flex flex-col w-full sm:w-48">
+                            <div className="flex justify-between items-center text-[9px] font-black uppercase text-slate-500 mb-1">
+                              <span>Distribuição</span>
+                              <span>{classAllocated}/{classExpected} ({classCompletionRate}%)</span>
+                            </div>
+                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-300 ${classCompletionRate === 100 ? 'bg-green-500' : 'bg-amber-500'}`}
+                                style={{ width: `${classCompletionRate}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Quick Jump Action Button */}
+                          <button
+                            id={`btn-goto-grid-${turma.id}`}
+                            onClick={() => {
+                              setSelectedTurmaId(turma.id);
+                              setViewMode('turmas');
+                              setIsShowingMissingClasses(false);
+                            }}
+                            className="px-4 py-2 bg-slate-100 hover:bg-slate-900 hover:text-white rounded-xl text-[10px] font-black text-slate-700 uppercase tracking-wider transition-all border border-transparent hover:scale-105 active:scale-95 shadow-sm cursor-pointer"
+                          >
+                            Ir para Grade
+                          </button>
+                        </div>
+
+                        {/* Schedule detail cards inside this classroom */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                          {sortedClassSubjects.map(({ subject, usage, total, missingCount, classroomUsage, labUsage }) => {
+                            const isPending = missingCount > 0;
+                            return (
+                              <div 
+                                key={subject.id} 
+                                className={`p-3 rounded-xl border transition-all ${
+                                  isPending 
+                                    ? 'bg-amber-50/40 border-amber-200/60 shadow-sm' 
+                                    : 'bg-slate-50/50 border-slate-100 opacity-70'
+                                }`}
+                              >
+                                <div className="flex justify-between items-start mb-1.5 flex-nowrap">
+                                  <span className="text-xs font-black text-slate-800 uppercase tracking-tighter truncate max-w-[130px] block font-sans" title={subject.name}>
+                                    {subject.name}
+                                  </span>
+                                  {isPending ? (
+                                    <span className="text-[8px] font-black bg-amber-500 text-white rounded px-1.5 py-0.5 uppercase tracking-wide">
+                                      -{missingCount} aula{missingCount > 1 ? 's' : ''}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[8px] font-black bg-green-100 text-green-700 rounded px-1.5 py-0.5 uppercase tracking-wide">
+                                      OK
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  {/* Subject progress indicator */}
+                                  <div className="flex justify-between text-[8px] font-bold text-slate-400 uppercase font-sans">
+                                    <span>Alocação</span>
+                                    <span>{usage} / {total} aulas</span>
+                                  </div>
+                                  <div className="w-full bg-slate-200/60 rounded-full h-1 overflow-hidden">
+                                    <div 
+                                      className={`h-full rounded-full ${isPending ? 'bg-amber-500' : 'bg-green-500'}`} 
+                                      style={{ width: `${Math.min(100, (usage / total) * 100)}%` }}
+                                    />
+                                  </div>
+
+                                  {/* Special Room Specific Counts */}
+                                  {(subject.labWorkload !== undefined || subject.classWorkload !== undefined) && (
+                                    <div className="flex items-center gap-2 text-[7.5pt] text-slate-500 font-bold font-sans">
+                                      <span>Sala: {classroomUsage}/{subject.classWorkload || 0}</span>
+                                      <span>•</span>
+                                      <span>Lab: {labUsage}/{subject.labWorkload || 0}</span>
+                                    </div>
+                                  )}
+
+                                  {/* Arm and go to cell button */}
+                                  <button
+                                    id={`btn-load-subject-${turma.id}-${subject.id}`}
+                                    onClick={() => {
+                                      setSelectedTurmaId(turma.id);
+                                      setTempSubject(subject.id);
+                                      setViewMode('turmas');
+                                      setIsShowingMissingClasses(false);
+                                    }}
+                                    className="w-full mt-2 py-1 text-[8px] font-black text-center uppercase tracking-widest text-[#657c36] hover:bg-[#657c36] hover:text-white border border-[#657c36]/20 bg-white hover:border-transparent rounded-md transition-all shadow-sm cursor-pointer font-bold font-sans"
+                                  >
+                                    Carregar Matéria
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 px-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest gap-4">
+                <span className="hidden sm:inline font-sans">Clique em "Ir para Grade" ou "Carregar Matéria" para começar a ajustar</span>
+                <button
+                  id="btn-close-missing-classes-footer"
+                  onClick={() => setIsShowingMissingClasses(false)}
+                  className="px-5 py-2.5 bg-slate-900 hover:bg-black text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md hover:scale-102 cursor-pointer ml-auto"
+                >
+                  Fechar janela
+                </button>
               </div>
             </motion.div>
           </div>
