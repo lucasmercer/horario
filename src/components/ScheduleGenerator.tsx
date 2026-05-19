@@ -27,6 +27,7 @@ interface Teacher {
   name: string;
   subjectIds: string[]; // Alterado para suportar múltiplas disciplinas
   availability?: string[]; // Array de slotIds selecionados como DISPONÍVEIS ("seg-1", "ter-6", etc)
+  preferDoubleClasses?: boolean; // Preferência de aulas geminadas
 }
 
 interface Subject {
@@ -94,6 +95,7 @@ export default function ScheduleGenerator() {
   const [newTeacherName, setNewTeacherName] = useState('');
   const [newTeacherSubjectIds, setNewTeacherSubjectIds] = useState<string[]>([]);
   const [newTeacherAvailability, setNewTeacherAvailability] = useState<string[]>([]);
+  const [newTeacherPreferDouble, setNewTeacherPreferDouble] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectWorkload, setNewSubjectWorkload] = useState<number>(5);
   const [newSubjectUseLabComp, setNewSubjectUseLabComp] = useState(false);
@@ -110,6 +112,7 @@ export default function ScheduleGenerator() {
   const [tempTeacher, setTempTeacher] = useState('');
   const [tempSubject, setTempSubject] = useState('');
   const [tempAssociatedTurmaId, setTempAssociatedTurmaId] = useState('');
+  const [allocateConsecutive, setAllocateConsecutive] = useState(false);
   const [slotError, setSlotError] = useState<string | null>(null);
   const [editingTeacherId, setEditingTeacherId] = useState<string | null>(null);
 
@@ -544,7 +547,7 @@ export default function ScheduleGenerator() {
     
     if (editingTeacherId) {
       setTeachers(prev => prev.map(t => t.id === editingTeacherId 
-        ? { ...t, name: newTeacherName, subjectIds: newTeacherSubjectIds, availability: newTeacherAvailability } 
+        ? { ...t, name: newTeacherName, subjectIds: newTeacherSubjectIds, availability: newTeacherAvailability, preferDoubleClasses: newTeacherPreferDouble } 
         : t
       ));
       setEditingTeacherId(null);
@@ -553,7 +556,8 @@ export default function ScheduleGenerator() {
         id: generateId(), 
         name: newTeacherName,
         subjectIds: newTeacherSubjectIds,
-        availability: newTeacherAvailability
+        availability: newTeacherAvailability,
+        preferDoubleClasses: newTeacherPreferDouble
       };
       setTeachers([...teachers, newTeacher]);
     }
@@ -562,6 +566,7 @@ export default function ScheduleGenerator() {
     setNewTeacherName('');
     setNewTeacherSubjectIds([]);
     setNewTeacherAvailability([]);
+    setNewTeacherPreferDouble(false);
   };
 
   const startEditTeacher = (teacher: Teacher) => {
@@ -569,6 +574,7 @@ export default function ScheduleGenerator() {
     setNewTeacherName(teacher.name);
     setNewTeacherSubjectIds(teacher.subjectIds || []);
     setNewTeacherAvailability(teacher.availability || []);
+    setNewTeacherPreferDouble(teacher.preferDoubleClasses || false);
   };
 
   const addSubject = () => {
@@ -742,16 +748,55 @@ export default function ScheduleGenerator() {
 
   const [showAllSubjectsInRoom, setShowAllSubjectsInRoom] = useState(false);
 
+  const getConsecutiveSlotLabel = (slot: string) => {
+    const [day, periodStr] = slot.split('-');
+    const period = parseInt(periodStr);
+    const dayLabel = DAYS.find(d => d.id === day)?.label || day;
+    
+    let consecPeriod: number | null = null;
+    let type: 'next' | 'prev' = 'next';
+    if (period >= 1 && period <= 6) {
+      if (period < 6) {
+        consecPeriod = period + 1;
+        type = 'next';
+      } else {
+        consecPeriod = 5;
+        type = 'prev';
+      }
+    } else if (period >= 7 && period <= 12) {
+      if (period < 12) {
+        consecPeriod = period + 1;
+        type = 'next';
+      } else {
+        consecPeriod = 11;
+        type = 'prev';
+      }
+    }
+    
+    if (!consecPeriod) return null;
+    const actualConsecPeriod = consecPeriod > 6 ? consecPeriod - 6 : consecPeriod;
+    return {
+      label: `${dayLabel}, ${actualConsecPeriod}º horário`,
+      type,
+      period: consecPeriod
+    };
+  };
+
   const handleSlotClick = (dayId: string, periodId: number, turmaId: string) => {
     setSelectedTurmaId(turmaId);
     const slotId = `${dayId}-${periodId}`;
     const currentSchedule = schedules[turmaId] || {};
     setSelectedSlot(slotId);
-    setTempTeacher(currentSchedule[slotId]?.teacherId || '');
+    const activeTeacherId = currentSchedule[slotId]?.teacherId || '';
+    setTempTeacher(activeTeacherId);
     setTempSubject(currentSchedule[slotId]?.subjectId || '');
     setTempAssociatedTurmaId(currentSchedule[slotId]?.associatedTurmaId || '');
     setSlotError(null);
     setShowAllSubjectsInRoom(false); // Reset when opening modal
+    
+    // Auto-detect if selected teacher has preferDoubleClasses
+    const teacher = teachers.find(t => t.id === activeTeacherId);
+    setAllocateConsecutive(teacher?.preferDoubleClasses || false);
   };
 
   const saveSlot = () => {
@@ -779,43 +824,93 @@ export default function ScheduleGenerator() {
       setSlotError("Por favor, selecione um professor.");
       return;
     } else {
-      // Workload Validation
-      const subject = subjects.find(s => s.id === tempSubject);
-      if (subject) {
-        const usage = getWorkloadUsage(tempSubject);
-        const currentSlotData = (schedules[selectedTurmaId] || {})[selectedSlot] as ScheduleSlot;
-        
-        const isEditingSame = currentSlotData?.subjectId === tempSubject && 
-                              (viewMode === 'rooms' ? currentSlotData?.associatedTurmaId === tempAssociatedTurmaId : true);
+      // Extract days and periods for both slots if allocating consecutive
+      const [day, periodStr] = selectedSlot.split('-');
+      const period = parseInt(periodStr);
+      let consecPeriod: number | null = null;
+      if (period >= 1 && period <= 6) {
+        consecPeriod = (period < 6) ? period + 1 : 5;
+      } else if (period >= 7 && period <= 12) {
+        consecPeriod = (period < 12) ? period + 1 : 11;
+      }
+      const consecSlot = consecPeriod ? `${day}-${consecPeriod}` : null;
 
-        if (!isEditingSame) {
-          if (viewMode === 'turmas') {
-            // Classroom assignment
-            if (usage.classroomUsage >= usage.classroomTotal) {
-              setSlotError(`Limite de aulas em SALA atingido para ${subject.name} (${usage.classroomTotal} aulas). Verifique a configuração da carga horária desta disciplina.`);
-              return;
-            }
-          } else {
-            // Lab assignment
-            if (usage.labUsage >= usage.labTotal) {
-              setSlotError(`Limite de aulas em LABORATÓRIO/ESPECIAL atingido para ${subject.name} (${usage.labUsage}/${usage.labTotal} aulas). Você precisa aumentar a 'Carga em Lab' nas configurações da disciplina.`);
-              return;
-            }
-          }
+      // Realtime teacher availability / conflict checks
+      if (tempTeacher) {
+        // Clicado
+        const selectedConflicts = getConflicts(day, period, tempTeacher, selectedTurmaId);
+        if (selectedConflicts.length > 0) {
+          setSlotError(selectedConflicts.includes('INDISPONÍVEL')
+            ? `Erro: O professor não está disponível no horário ${day}-${period}.`
+            : `Erro: O professor já está ocupado em outra turma no horário ${day}-${period} (${selectedConflicts.join(', ')}).`);
+          return;
+        }
 
-          if (usage.usage >= usage.total) {
-            setSlotError(`Limite TOTAL de carga horária atingido para ${subject.name} (Máximo ${usage.total} aulas semanais).`);
+        // Consecutivo/Geminado
+        if (allocateConsecutive && consecSlot && consecPeriod) {
+          const consecConflicts = getConflicts(day, consecPeriod, tempTeacher, selectedTurmaId);
+          if (consecConflicts.length > 0) {
+            const labelHelper = getConsecutiveSlotLabel(selectedSlot)?.label || `${day}-${consecPeriod}`;
+            setSlotError(consecConflicts.includes('INDISPONÍVEL')
+              ? `Erro: O professor não está disponível no horário geminado ${labelHelper}.`
+              : `Erro: O professor já está ocupado em outra turma no horário geminado ${labelHelper} (${consecConflicts.join(', ')}).`);
             return;
           }
         }
       }
-    }
 
-    currentSchedule[selectedSlot] = { 
-      teacherId: tempTeacher, 
-      subjectId: tempSubject,
+      // Workload Validation
+      const subject = subjects.find(s => s.id === tempSubject);
+      if (subject) {
+        const usage = getWorkloadUsage(tempSubject);
+        const currentSlotData = currentSchedule[selectedSlot] as ScheduleSlot;
+        const consecSlotData = (allocateConsecutive && consecSlot) ? (currentSchedule[consecSlot] as ScheduleSlot) : null;
+        
+        const isEditingSameSelected = currentSlotData?.subjectId === tempSubject && 
+                              (viewMode === 'rooms' ? currentSlotData?.associatedTurmaId === tempAssociatedTurmaId : true);
+        
+        const isEditingSameConsec = consecSlotData?.subjectId === tempSubject && 
+                              (viewMode === 'rooms' ? consecSlotData?.associatedTurmaId === tempAssociatedTurmaId : true);
+
+        let extraNeeded = 0;
+        if (!isEditingSameSelected) extraNeeded += 1;
+        if (allocateConsecutive && consecSlot && !isEditingSameConsec) extraNeeded += 1;
+
+        if (viewMode === 'turmas') {
+          // Classroom assignment
+          if (usage.classroomUsage + extraNeeded > usage.classroomTotal) {
+            setSlotError(`Limite de aulas em SALA atingido para ${subject.name} (Máximo ${usage.classroomTotal} aulas). Alocar esta aula ${allocateConsecutive ? 'como geminada ' : ''}ultrapassa o limite.`);
+            return;
+          }
+        } else {
+          // Lab assignment
+          if (usage.labUsage + extraNeeded > usage.labTotal) {
+            setSlotError(`Limite de aulas em LABORATÓRIO/ESPECIAL atingido para ${subject.name} (Máximo ${usage.labTotal} aulas). Alocar esta aula ${allocateConsecutive ? 'como geminada ' : ''}ultrapassa o limite.`);
+            return;
+          }
+        }
+
+        if (usage.usage + extraNeeded > usage.total) {
+          setSlotError(`Limite TOTAL de carga horária atingido para ${subject.name} (Máximo ${usage.total} aulas semanais). Alocar esta aula ${allocateConsecutive ? 'como geminada ' : ''}ultrapassa o limite.`);
+          return;
+        }
+      }
+
+      // Apply assignments
+      currentSchedule[selectedSlot] = { 
+        teacherId: tempTeacher, 
+        subjectId: tempSubject,
         associatedTurmaId: viewMode === 'rooms' ? tempAssociatedTurmaId : undefined
       };
+
+      if (allocateConsecutive && consecSlot) {
+        currentSchedule[consecSlot] = {
+          teacherId: tempTeacher,
+          subjectId: tempSubject,
+          associatedTurmaId: viewMode === 'rooms' ? tempAssociatedTurmaId : undefined
+        };
+      }
+    }
 
     setSchedules({
       ...schedules,
@@ -1279,12 +1374,13 @@ export default function ScheduleGenerator() {
               }
               
               .corner-header { width: 14px; }
-              .time-header { width: 45px; font-size: 5.5pt; font-weight: 800; background-color: #f1f5f9; }
+              .time-header { width: 45px; font-size: 7.2pt; font-weight: 800; background-color: #f1f5f9; height: 15pt; }
               
               .turma-header { 
                 background-color: #e2e8f0; 
-                font-size: 5.5pt; 
+                font-size: 7.2pt; 
                 font-weight: 800; 
+                height: 15pt;
               }
               
               .day-cell { 
@@ -1296,7 +1392,7 @@ export default function ScheduleGenerator() {
                 display: block;
                 writing-mode: vertical-lr;
                 transform: rotate(180deg);
-                font-size: 5pt; 
+                font-size: 6pt; 
                 font-weight: 900; 
                 text-transform: uppercase;
                 margin: 0 auto;
@@ -1304,35 +1400,40 @@ export default function ScheduleGenerator() {
               
               .slot-cell { 
                 overflow: hidden;
-                height: 12.5pt; 
-                line-height: 1;
+                height: 14.8pt; 
+                line-height: 1.1;
               }
               
               .subj-name { 
-                font-size: 5pt; 
+                font-size: 7.2pt; 
                 font-weight: 800; 
                 color: black; 
                 text-transform: uppercase;
-                line-height: 1;
+                line-height: 1.1;
                 white-space: nowrap;
                 overflow: hidden;
+                text-overflow: ellipsis;
+                padding: 0 1.5px;
               }
               
               .prof-name { 
-                font-size: 4.5pt; 
-                color: black; 
+                font-size: 5.8pt; 
+                color: #334155; 
                 line-height: 1;
                 white-space: nowrap;
                 overflow: hidden;
+                text-overflow: ellipsis;
+                padding: 0 1.5px;
+                margin-top: 0.5px;
               }
               
               .time-info { 
                 background-color: #f8fafc;
-                line-height: 1;
-                height: 12.5pt;
+                line-height: 1.1;
+                height: 14.8pt;
               }
-              .p-num { display: block; font-size: 5.5pt; font-weight: 700; color: #2563eb; }
-              .p-time { display: block; font-size: 4.2pt; font-weight: 400; color: #64748b; }
+              .p-num { display: block; font-size: 6.2pt; font-weight: 800; color: #1e3a8a; }
+              .p-time { display: block; font-size: 4.8pt; font-weight: 500; color: #475569; }
               
               .print-footer {
                 margin-top: 1px;
@@ -1920,8 +2021,10 @@ export default function ScheduleGenerator() {
                         const linkedTeachers = teachers.filter(t => t.subjectIds.includes(sId));
                         if (linkedTeachers.length > 0) {
                           setTempTeacher(linkedTeachers[0].id);
+                          setAllocateConsecutive(linkedTeachers[0].preferDoubleClasses || false);
                         } else if (teachers.length === 1) {
                           setTempTeacher(teachers[0].id);
+                          setAllocateConsecutive(teachers[0].preferDoubleClasses || false);
                         }
                       }
                     }}
@@ -1980,9 +2083,12 @@ export default function ScheduleGenerator() {
                       if (teacher && teacher.subjectIds.length === 1 && !tempSubject) {
                         setTempSubject(teacher.subjectIds[0]);
                       }
+                      if (teacher) {
+                        setAllocateConsecutive(teacher.preferDoubleClasses || false);
+                      }
                     }}
                     className={`w-full px-4 py-3 border-2 rounded-xl text-xs font-bold transition-all focus:outline-none ${
-                      getConflicts(selectedSlot.split('-')[0], parseInt(selectedSlot.split('-')[1]), tempTeacher, selectedTurmaId).length > 0
+                      selectedSlot && getConflicts(selectedSlot.split('-')[0], parseInt(selectedSlot.split('-')[1]), tempTeacher, selectedTurmaId).length > 0
                       ? 'bg-red-50 border-red-200 text-red-900'
                       : 'bg-slate-50 border-slate-100 text-slate-800 focus:border-[#657c36]'
                     }`}
@@ -2011,11 +2117,9 @@ export default function ScheduleGenerator() {
                         <option key={t.id} value={t.id}>{t.name}</option>
                       ))
                     )}
-                    
-                    {/* If no subject is selected, just show all (already handled by first filter) */}
                   </select>
                   
-                  {getConflicts(selectedSlot.split('-')[0], parseInt(selectedSlot.split('-')[1]), tempTeacher, selectedTurmaId).length > 0 && (
+                  {selectedSlot && getConflicts(selectedSlot.split('-')[0], parseInt(selectedSlot.split('-')[1]), tempTeacher, selectedTurmaId).length > 0 && (
                     <div className="p-2 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2">
                       <AlertCircle className="w-3 h-3 text-red-500 shadow-sm" />
                       <p className="text-[9px] font-bold text-red-600 leading-tight">
@@ -2025,6 +2129,59 @@ export default function ScheduleGenerator() {
                       </p>
                     </div>
                   )}
+
+                  {/* Option for Double Classes */}
+                  {tempTeacher && tempSubject && (
+                    <div className="mt-2.5 p-2.5 bg-[#657c36]/5 border border-[#657c36]/20 rounded-xl flex items-center justify-between transition-all">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black text-[#657c36] uppercase tracking-wide">Alocar Aula Geminada</span>
+                        {selectedSlot && getConsecutiveSlotLabel(selectedSlot) && (
+                          <span className="text-[8px] font-bold text-slate-500 uppercase">
+                            Também ocupará: {getConsecutiveSlotLabel(selectedSlot)?.label}
+                          </span>
+                        )}
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={allocateConsecutive} 
+                          onChange={e => setAllocateConsecutive(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:shadow-sm after:transition-all peer-checked:bg-[#657c36]"></div>
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Realtime check for geminated conflicts */}
+                  {allocateConsecutive && selectedSlot && (() => {
+                    const [day, periodStr] = selectedSlot.split('-');
+                    const period = parseInt(periodStr);
+                    let consecPeriod = 0;
+                    if (period >= 1 && period <= 6) {
+                      consecPeriod = (period < 6) ? period + 1 : 5;
+                    } else if (period >= 7 && period <= 12) {
+                      consecPeriod = (period < 12) ? period + 1 : 11;
+                    }
+                    if (consecPeriod > 0 && tempTeacher) {
+                      const consecConflicts = getConflicts(day, consecPeriod, tempTeacher, selectedTurmaId);
+                      if (consecConflicts.length > 0) {
+                        return (
+                          <div className="mt-1.5 p-2 bg-amber-50 border border-amber-100 rounded-lg flex items-center gap-2">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <p className="text-[9px] font-bold text-amber-700 leading-tight">
+                              CONFLITO NO HORÁRIO GEMINADO ({getConsecutiveSlotLabel(selectedSlot)?.label}): {
+                                consecConflicts.includes('INDISPONÍVEL') 
+                                  ? "PROFESSOR INDISPONÍVEL NESTE HORÁRIO!" 
+                                  : `PROFESSOR JÁ ESTÁ EM: ${consecConflicts.join(', ')}`
+                              }
+                            </p>
+                          </div>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
 
@@ -2487,6 +2644,26 @@ export default function ScheduleGenerator() {
                         </div>
                       </div>
 
+                      {/* Preferência de Aulas Geminadas */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Preferência de Aulas</label>
+                        <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-100 rounded-xl transition-all">
+                          <div className="flex flex-col gap-0.5 max-w-[80%]">
+                            <span className="text-[10px] font-black text-slate-700 uppercase tracking-tight">Preferir Aulas Geminadas</span>
+                            <span className="text-[8px] font-bold text-slate-400 uppercase leading-normal">Tentar preencher dois horários consecutivos no mesmo dia para este professor</span>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <input 
+                              type="checkbox" 
+                              checked={newTeacherPreferDouble} 
+                              onChange={e => setNewTeacherPreferDouble(e.target.checked)}
+                              className="sr-only peer"
+                            />
+                            <div className="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-[#657c36]"></div>
+                          </label>
+                        </div>
+                      </div>
+
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Disponibilidade no Colégio</label>
                         <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
@@ -2624,6 +2801,9 @@ export default function ScheduleGenerator() {
                                 <span className="text-xs font-black text-slate-800">{teacher.name}</span>
                                 {teacher.availability && teacher.availability.length > 0 && (
                                   <span className="text-[7px] font-black bg-blue-100 text-blue-600 px-1 py-0.5 rounded uppercase tracking-tighter" title="Disponibilidade configurada">Disp.</span>
+                                )}
+                                {teacher.preferDoubleClasses && (
+                                  <span className="text-[7px] font-black bg-amber-100 text-amber-700 px-1 py-0.5 rounded uppercase tracking-tighter" title="Prefere aulas geminadas">Geminadas</span>
                                 )}
                               </div>
                               <div className="flex flex-wrap gap-1 mt-1">
