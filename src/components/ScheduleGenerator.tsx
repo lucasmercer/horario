@@ -29,6 +29,7 @@ interface Teacher {
   subjectIds: string[]; // Alterado para suportar múltiplas disciplinas
   availability?: string[]; // Array de slotIds selecionados como DISPONÍVEIS ("seg-1", "ter-6", etc)
   preferDoubleClasses?: boolean; // Preferência de aulas geminadas
+  turmaIds?: string[]; // Turmas que o professor é docente (opcional, vazio = todas)
 }
 
 interface Subject {
@@ -84,7 +85,7 @@ export default function ScheduleGenerator() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [schedules, setSchedules] = useState<AllSchedules>({});
-  const [version, setVersion] = useState<number>(70);
+  const [version, setVersion] = useState<number>(72);
   const [logoUrl, setLogoUrl] = useState<string>('http://lucasleniar.com.br/mint/civico.png');
   const [showLogoInput, setShowLogoInput] = useState(false);
   const [tempLogoUrl, setTempLogoUrl] = useState('');
@@ -100,6 +101,7 @@ export default function ScheduleGenerator() {
   const [newTeacherSubjectIds, setNewTeacherSubjectIds] = useState<string[]>([]);
   const [newTeacherAvailability, setNewTeacherAvailability] = useState<string[]>([]);
   const [newTeacherPreferDouble, setNewTeacherPreferDouble] = useState(false);
+  const [newTeacherTurmaIds, setNewTeacherTurmaIds] = useState<string[]>([]);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectWorkload, setNewSubjectWorkload] = useState<number>(5);
   const [newSubjectUseLabComp, setNewSubjectUseLabComp] = useState(false);
@@ -180,7 +182,7 @@ export default function ScheduleGenerator() {
       
       if (t.shift) return t.shift === importShift;
       // Fallback for older data or implicitly named turmas
-      const isNamedTarde = t.name.toLowerCase().includes('tarde');
+      const isNamedTarde = t.name.toLowerCase().includes('tarde') || t.id.toLowerCase().includes('tarde');
       return importShift === 'manha' ? !isNamedTarde : isNamedTarde;
     })
   );
@@ -196,9 +198,10 @@ export default function ScheduleGenerator() {
     const savedVersion = localStorage.getItem('cecm_version');
     if (savedVersion) {
       const v = parseInt(savedVersion);
-      setVersion(v < 70 ? 70 : v);
+      // Elevate minimum version to 72 and auto-increase if it's currently at 71 or below
+      setVersion(v <= 71 ? 72 : v);
     } else {
-      setVersion(70);
+      setVersion(72);
     }
 
     const handleEsc = (e: KeyboardEvent) => {
@@ -283,9 +286,9 @@ export default function ScheduleGenerator() {
       const savedVersion = localStorage.getItem('cecm_version');
       if (savedVersion) {
         const v = parseInt(savedVersion);
-        setVersion(v < 70 ? 70 : v);
+        setVersion(v <= 71 ? 72 : v);
       } else {
-        setVersion(70);
+        setVersion(72);
       }
 
       if (savedTurmas) {
@@ -312,8 +315,13 @@ export default function ScheduleGenerator() {
         // Migrate normal turmas that have no shift
         parsedTurmas = parsedTurmas.map((t: any) => {
           if (!t.isRoom && !t.shift) {
-            const isNamedTarde = t.name.toLowerCase().includes('tarde');
+            const isNamedTarde = t.name.toLowerCase().includes('tarde') || t.id.toLowerCase().includes('tarde');
             t.shift = isNamedTarde ? 'tarde' : 'manha';
+            updated = true;
+          }
+          // Healing: If an afternoon user got corrupted and stored with 'manha' shift, restore it to 'tarde'
+          if (!t.isRoom && t.shift === 'manha' && (t.id.toLowerCase().includes('tarde') || t.name.toLowerCase().includes('tarde'))) {
+            t.shift = 'tarde';
             updated = true;
           }
           return t;
@@ -511,12 +519,14 @@ export default function ScheduleGenerator() {
                 };
               }
               // Normal turmas shift migration
-              if (!t.isRoom && !t.shift) {
-                const isNamedTarde = t.name?.toLowerCase().includes('tarde');
-                return {
-                  ...t,
-                  shift: isNamedTarde ? 'tarde' : 'manha'
-                };
+              if (!t.isRoom) {
+                if (!t.shift) {
+                  const isNamedTarde = t.name?.toLowerCase().includes('tarde') || t.id?.toLowerCase().includes('tarde');
+                  t.shift = isNamedTarde ? 'tarde' : 'manha';
+                } else if (t.shift === 'manha' && (t.id?.toLowerCase().includes('tarde') || t.name?.toLowerCase().includes('tarde'))) {
+                  // Heal shift if it is incorrectly stored in the raw backup as 'manha'
+                  t.shift = 'tarde';
+                }
               }
               return t;
             });
@@ -563,7 +573,7 @@ export default function ScheduleGenerator() {
               const firstTurma = importedTurmas[0];
               if (firstTurma.shift) {
                 setImportShift(firstTurma.shift);
-              } else if (firstTurma.name?.toLowerCase().includes('tarde')) {
+              } else if (firstTurma.name?.toLowerCase().includes('tarde') || firstTurma.id?.toLowerCase().includes('tarde')) {
                 setImportShift('tarde');
               } else {
                 setImportShift('manha');
@@ -619,7 +629,7 @@ export default function ScheduleGenerator() {
     
     if (editingTeacherId) {
       setTeachers(prev => prev.map(t => t.id === editingTeacherId 
-        ? { ...t, name: newTeacherName, subjectIds: newTeacherSubjectIds, availability: newTeacherAvailability, preferDoubleClasses: newTeacherPreferDouble } 
+        ? { ...t, name: newTeacherName, subjectIds: newTeacherSubjectIds, availability: newTeacherAvailability, preferDoubleClasses: newTeacherPreferDouble, turmaIds: newTeacherTurmaIds } 
         : t
       ));
       setEditingTeacherId(null);
@@ -629,7 +639,8 @@ export default function ScheduleGenerator() {
         name: newTeacherName,
         subjectIds: newTeacherSubjectIds,
         availability: newTeacherAvailability,
-        preferDoubleClasses: newTeacherPreferDouble
+        preferDoubleClasses: newTeacherPreferDouble,
+        turmaIds: newTeacherTurmaIds
       };
       setTeachers([...teachers, newTeacher]);
     }
@@ -639,6 +650,7 @@ export default function ScheduleGenerator() {
     setNewTeacherSubjectIds([]);
     setNewTeacherAvailability([]);
     setNewTeacherPreferDouble(false);
+    setNewTeacherTurmaIds([]);
   };
 
   const startEditTeacher = (teacher: Teacher) => {
@@ -647,6 +659,7 @@ export default function ScheduleGenerator() {
     setNewTeacherSubjectIds(teacher.subjectIds || []);
     setNewTeacherAvailability(teacher.availability || []);
     setNewTeacherPreferDouble(teacher.preferDoubleClasses || false);
+    setNewTeacherTurmaIds(teacher.turmaIds || []);
   };
 
   const addSubject = () => {
@@ -909,6 +922,17 @@ export default function ScheduleGenerator() {
 
       // Realtime teacher availability / conflict checks
       if (tempTeacher) {
+        const teacher = teachers.find(t => t.id === tempTeacher);
+        if (teacher && teacher.turmaIds && teacher.turmaIds.length > 0) {
+          const targetTurmaId = viewMode === 'rooms' ? tempAssociatedTurmaId : selectedTurmaId;
+          if (!teacher.turmaIds.includes(targetTurmaId)) {
+            const targetTurmaObj = turmas.find(t => t.id === targetTurmaId);
+            const turmaName = targetTurmaObj ? targetTurmaObj.name : targetTurmaId;
+            setSlotError(`Erro: O professor ${teacher.name} não leciona para a turma ${turmaName}.`);
+            return;
+          }
+        }
+
         // Clicado
         const selectedConflicts = getConflicts(day, period, tempTeacher, selectedTurmaId);
         if (selectedConflicts.length > 0) {
@@ -1068,7 +1092,7 @@ export default function ScheduleGenerator() {
   };
 
   const handlePrintSingleTurma = (turma: Turma) => {
-    const shift = turma.shift || (turma.name.toLowerCase().includes('tarde') ? 'tarde' : 'manha');
+    const shift = turma.shift || (turma.id.toLowerCase().includes('tarde') || turma.name.toLowerCase().includes('tarde') ? 'tarde' : 'manha');
     const currentPeriods = shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
     const timeRangesManha = ["7h30 às 8h20", "8h20 às 9h10", "9h10 às 10h", "10h20 às 11h10", "11h10 às 12h", "12h às 12h50"];
     const timeRangesTarde = ["13h às 13h50", "13h50 às 14h40", "14h40 às 15h30", "15h50 às 16h40", "16h40 às 17h30", "17h30 às 18h20"];
@@ -1287,8 +1311,8 @@ export default function ScheduleGenerator() {
   const handlePrintGeralTurmas = () => {
     // Less aggressive filtering for printing
     const filteredTurmas = turmas.filter(t => !t.isRoom);
-    const manhaTurmas = sortTurmasList(filteredTurmas.filter(t => t.shift === 'manha' || (!t.shift && !t.name.toLowerCase().includes('tarde'))));
-    const tardeTurmas = sortTurmasList(filteredTurmas.filter(t => t.shift === 'tarde' || (!t.shift && t.name.toLowerCase().includes('tarde'))));
+    const manhaTurmas = sortTurmasList(filteredTurmas.filter(t => t.shift === 'manha' || (!t.shift && (!t.name.toLowerCase().includes('tarde') && !t.id.toLowerCase().includes('tarde')))));
+    const tardeTurmas = sortTurmasList(filteredTurmas.filter(t => t.shift === 'tarde' || (!t.shift && (t.name.toLowerCase().includes('tarde') || t.id.toLowerCase().includes('tarde')))));
     
     const generateScheduleTable = (shiftTurmas: Turma[], shift: 'manha' | 'tarde') => {
       if (shiftTurmas.length === 0) return '';
@@ -2231,15 +2255,15 @@ export default function ScheduleGenerator() {
                     {viewMode === 'turmas' ? (
                       <>
                         {/* First, show linked teachers */}
-                        {teachers.filter(t => !tempSubject || t.subjectIds.includes(tempSubject)).map(t => (
+                        {teachers.filter(t => (!tempSubject || t.subjectIds.includes(tempSubject)) && (!t.turmaIds || t.turmaIds.length === 0 || t.turmaIds.includes(selectedTurmaId))).map(t => (
                           <option key={t.id} value={t.id}>{t.name}</option>
                         ))}
                         
                         {/* Then, if a subject is selected, show others in a group */}
-                        {tempSubject && teachers.filter(t => !t.subjectIds.includes(tempSubject)).length > 0 && (
+                        {tempSubject && teachers.filter(t => !t.subjectIds.includes(tempSubject) && (!t.turmaIds || t.turmaIds.length === 0 || t.turmaIds.includes(selectedTurmaId))).length > 0 && (
                           <optgroup label="Outros Professores (Não vinculados a esta disciplina)">
                             {teachers
-                              .filter(t => !t.subjectIds.includes(tempSubject))
+                              .filter(t => !t.subjectIds.includes(tempSubject) && (!t.turmaIds || t.turmaIds.length === 0 || t.turmaIds.includes(selectedTurmaId)))
                               .map(t => (
                                 <option key={t.id} value={t.id}>{t.name}</option>
                               ))}
@@ -2247,9 +2271,11 @@ export default function ScheduleGenerator() {
                         )}
                       </>
                     ) : (
-                      teachers.sort((a,b) => a.name.localeCompare(b.name)).map(t => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))
+                      teachers
+                        .filter(t => !t.turmaIds || t.turmaIds.length === 0 || !tempAssociatedTurmaId || t.turmaIds.includes(tempAssociatedTurmaId))
+                        .sort((a,b) => a.name.localeCompare(b.name)).map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))
                     )}
                   </select>
                   
@@ -2706,6 +2732,7 @@ export default function ScheduleGenerator() {
                     setNewTeacherName('');
                     setNewTeacherSubjectIds([]);
                     setNewTeacherAvailability([]);
+                    setNewTeacherTurmaIds([]);
                   }} 
                   className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500"
                 >
@@ -2776,6 +2803,52 @@ export default function ScheduleGenerator() {
                             </label>
                           ))}
                         </div>
+                      </div>
+
+                      <div className="space-y-2 col-span-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Turmas que o Professor Leciona</label>
+                        <div className="flex flex-wrap gap-1.5 border border-slate-100 rounded-xl p-2 bg-slate-50 transition-all max-h-40 overflow-y-auto">
+                          {turmas.filter(t => !t.isRoom).map(t => (
+                            <label key={t.id} className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-lg cursor-pointer transition-all hover:border-[#657c36] hover:bg-[#657c36]/5 group">
+                              <input 
+                                type="checkbox"
+                                checked={newTeacherTurmaIds.includes(t.id)}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setNewTeacherTurmaIds([...newTeacherTurmaIds, t.id]);
+                                  } else {
+                                    setNewTeacherTurmaIds(newTeacherTurmaIds.filter(id => id !== t.id));
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-[#657c36] focus:ring-[#657c36]"
+                              />
+                              <span className="text-[10px] font-black text-slate-600 uppercase group-hover:text-slate-900 tracking-tight">{t.name}</span>
+                            </label>
+                          ))}
+                          {turmas.filter(t => !t.isRoom).length === 0 && (
+                            <span className="text-[10px] font-bold text-slate-400 uppercase p-1">Nenhuma turma cadastrada</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2 px-1">
+                          <button 
+                            type="button"
+                            onClick={() => setNewTeacherTurmaIds(turmas.filter(t => !t.isRoom).map(t => t.id))}
+                            className="text-[9px] font-black uppercase text-[#657c36] hover:underline cursor-pointer"
+                          >
+                            Selecionar Todas
+                          </button>
+                          <span className="text-slate-300">|</span>
+                          <button 
+                            type="button"
+                            onClick={() => setNewTeacherTurmaIds([])}
+                            className="text-[9px] font-black uppercase text-red-600 hover:underline cursor-pointer"
+                          >
+                            Livre (Todas)
+                          </button>
+                        </div>
+                        <p className="text-[8px] font-bold text-slate-400 uppercase px-1 leading-normal tracking-tight mt-1">
+                          Se nenhuma turma for selecionada, o professor poderá lecionar em QUALQUER turma por padrão.
+                        </p>
                       </div>
 
                       {/* Preferência de Aulas Geminadas */}
@@ -2946,6 +3019,16 @@ export default function ScheduleGenerator() {
                                 ))}
                                 {teacherSubjects.length === 0 && <span className="text-[8px] font-bold text-slate-400">Sem disciplina vinculada</span>}
                               </div>
+                              {teacher.turmaIds && teacher.turmaIds.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 items-center mt-1">
+                                  <span className="text-[7.5px] font-bold text-slate-400 uppercase tracking-tight">Turmas:</span>
+                                  {turmas.filter(t => teacher.turmaIds?.includes(t.id)).map(t => (
+                                    <span key={t.id} className="text-[7.5px] font-bold bg-indigo-50 border border-indigo-100 text-indigo-600 px-1 rounded uppercase tracking-tighter leading-none">{t.name}</span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-[7.5px] font-semibold text-slate-400 mt-1 uppercase tracking-tight">Todas as Turmas</div>
+                              )}
                             </div>
                             <div className="flex items-center gap-1">
                               <button 
@@ -3361,12 +3444,12 @@ export default function ScheduleGenerator() {
                   if (missingClassesShift === 'manha') {
                     filteredTurmas = filteredTurmas.filter(t => {
                       if (t.shift) return t.shift === 'manha';
-                      return !t.name.toLowerCase().includes('tarde');
+                      return !t.name.toLowerCase().includes('tarde') && !t.id.toLowerCase().includes('tarde');
                     });
                   } else if (missingClassesShift === 'tarde') {
                     filteredTurmas = filteredTurmas.filter(t => {
                       if (t.shift) return t.shift === 'tarde';
-                      return t.name.toLowerCase().includes('tarde');
+                      return t.name.toLowerCase().includes('tarde') || t.id.toLowerCase().includes('tarde');
                     });
                   }
 
@@ -3452,9 +3535,9 @@ export default function ScheduleGenerator() {
                         {/* Turma summary row */}
                         <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-2 border-b border-slate-100 font-sans">
                           <div className="flex items-center gap-2">
-                            <div className="w-10 h-10 rounded-xl bg-slate-900 flex flex-col items-center justify-center text-white font-black shrink-0">
-                              <span className="text-sm leading-none">{turma.name}</span>
-                              <span className="text-[6px] font-bold uppercase tracking-tight text-slate-300 mt-0.5 font-sans">
+                            <div className="min-w-[4.25rem] px-2 h-11 rounded-xl bg-slate-900 flex flex-col items-center justify-center text-white font-black shrink-0">
+                              <span className="text-[11px] font-extrabold uppercase tracking-tight leading-none text-center whitespace-nowrap">{turma.name}</span>
+                              <span className="text-[6.5px] font-bold uppercase tracking-widest text-slate-300 mt-1 font-sans">
                                 {turma.shift === 'manha' ? 'MAN' : 'TAR'}
                               </span>
                             </div>
