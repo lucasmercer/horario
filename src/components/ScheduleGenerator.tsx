@@ -941,10 +941,10 @@ export default function ScheduleGenerator() {
           <div style="font-weight: 800; font-size: 7.5pt; color: #0f172a;">
             Sistema feito por: Prof. Lucas Mercer Leniar
             <span style="font-size: 6pt; color: #64748b; font-weight: normal; margin-left: 8px;">
-              - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - Atualização de Grade
             </span>
           </div>
-          <div style="font-size: 5.5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px;">www.LucasLeniar.com.br</div>
+          <div style="font-size: 5.5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px; page-break-inside: avoid;">www.LucasLeniar.com.br</div>
         </div>
       </div>
     `;
@@ -1027,10 +1027,10 @@ export default function ScheduleGenerator() {
              <div style="font-weight: 800; font-size: 6.5pt; color: #0f172a;">
                Sistema feito por: Prof. Lucas Mercer Leniar
                <span style="font-size: 5.5pt; color: #64748b; font-weight: normal; margin-left: 6px;">
-                 - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                 - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - Atualização de Grade
                </span>
              </div>
-             <div style="font-size: 5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 0px;">www.LucasLeniar.com.br</div>
+             <div style="font-size: 5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 0px; page-break-inside: avoid;">www.LucasLeniar.com.br</div>
           </div>
         </div>
       `;
@@ -1172,10 +1172,10 @@ export default function ScheduleGenerator() {
             <div style="font-weight: 800; font-size: 7pt; color: #0f172a;">
               Sistema feito por: Prof. Lucas Mercer Leniar
               <span style="font-size: 5.5pt; color: #64748b; font-weight: normal; margin-left: 8px;">
-                - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                - Versão ${version} - ${new Date().toLocaleDateString('pt-BR')} - ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - Atualização de Grade
               </span>
             </div>
-            <div style="font-size: 5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px;">www.LucasLeniar.com.br</div>
+            <div style="font-size: 5pt; color: #2563eb; font-weight: 800; letter-spacing: 0.1em; margin-top: 1px; page-break-inside: avoid;">www.LucasLeniar.com.br</div>
           </div>
         </div>
       `;
@@ -1214,10 +1214,10 @@ export default function ScheduleGenerator() {
                 page-break-after: always; 
                 break-after: page;
                 width: 100%;
-                height: 200mm;
+                height: 190mm;
                 display: flex;
                 flex-direction: column;
-                padding-bottom: 2mm;
+                padding-bottom: 0mm;
               }
               
               .print-header { text-align: center; margin-bottom: 2px; }
@@ -1299,11 +1299,12 @@ export default function ScheduleGenerator() {
               .p-time { display: block; font-size: 5pt; font-weight: 400; color: #64748b; }
               
               .print-footer {
-                margin-top: 2px;
+                margin-top: 1px;
                 text-align: right;
                 font-size: 6.5pt;
                 color: black;
                 font-weight: 600;
+                page-break-inside: avoid;
               }
               
               tr.day-end {
@@ -1358,7 +1359,7 @@ export default function ScheduleGenerator() {
                 page-break-after: always; 
                 break-after: page;
                 width: 100%; 
-                height: 285mm;
+                height: 278mm;
                 display: flex; 
                 flex-direction: column; 
               }
@@ -1380,7 +1381,7 @@ export default function ScheduleGenerator() {
               .subj-name { font-weight: 800; font-size: 8pt; text-transform: uppercase; margin-bottom: 0px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
               .prof-name { font-size: 7.5pt; color: black !important; font-weight: 600; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               .day-end { border-bottom: 1.2pt solid black; }
-              .print-footer { margin-top: 3px; text-align: right; font-size: 6.5pt; color: black; font-weight: 600; }
+              .print-footer { margin-top: 2px; text-align: right; font-size: 6.5pt; color: black; font-weight: 600; page-break-inside: avoid; }
             </style>
           </head>
           <body>
