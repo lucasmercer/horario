@@ -2,5 +2,7 @@
   "name": "Sistema de Horários - CECM Gregório Szeremeta",
   "description": "Sistema completo de gestão e geração de horários escolares com extração inteligente de imagens e gerenciamento de professores/disciplinas para o CECM Gregório Szeremeta.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
