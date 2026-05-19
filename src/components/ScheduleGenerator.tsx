@@ -181,6 +181,23 @@ export default function ScheduleGenerator() {
     
     const savedVersion = localStorage.getItem('cecm_version');
     if (savedVersion) setVersion(parseInt(savedVersion));
+
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsAddingTeacher(false);
+        setIsAddingRoom(false);
+        setIsAddingSubject(false);
+        setIsAddingTurma(false);
+        setIsPrintingTurmaSelection(false);
+        setIsClearingSelection(false);
+        setSelectedSlot(null);
+        setEditingTeacherId(null);
+        setEditingSubjectId(null);
+        setEditingTurmaId(null);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
   }, []);
 
   // Synchronize selected turma when shift changes or list changes
@@ -359,6 +376,32 @@ export default function ScheduleGenerator() {
     URL.revokeObjectURL(url);
   };
 
+  // Helper to remap schedule if shift changes
+  const remapScheduleIfNecessary = (turma: Turma, schedule: Schedule): Schedule => {
+    if (!turma.shift || turma.shift === 'ambos') return schedule;
+    
+    const newSchedule: Schedule = {};
+    let changed = false;
+    
+    Object.entries(schedule).forEach(([slotId, slot]) => {
+      const [day, periodStr] = slotId.split('-');
+      const period = parseInt(periodStr);
+      
+      let targetPeriod = period;
+      if (turma.shift === 'manha' && period > 6) {
+        targetPeriod = period - 6;
+        changed = true;
+      } else if (turma.shift === 'tarde' && period <= 6) {
+        targetPeriod = period + 6;
+        changed = true;
+      }
+      
+      newSchedule[`${day}-${targetPeriod}`] = slot;
+    });
+    
+    return changed ? newSchedule : schedule;
+  };
+
   const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -418,7 +461,21 @@ export default function ScheduleGenerator() {
             });
             
             setTurmas(importedTurmas);
-            setSchedules(data.schedules || {});
+
+            // Normalização de schedules no import
+            const rawSchedules = data.schedules || {};
+            const normalizedSchedules: AllSchedules = {};
+            
+            Object.keys(rawSchedules).forEach(tid => {
+              const turma = importedTurmas.find((t: any) => t.id === tid);
+              if (turma) {
+                normalizedSchedules[tid] = remapScheduleIfNecessary(turma, rawSchedules[tid]);
+              } else {
+                normalizedSchedules[tid] = rawSchedules[tid];
+              }
+            });
+
+            setSchedules(normalizedSchedules);
             setLogoUrl(data.logoUrl || '');
             setVersion(prev => (data.version || prev) + 1);
             
@@ -640,10 +697,23 @@ export default function ScheduleGenerator() {
     }
 
     if (editingTurmaId) {
+      const oldTurma = turmas.find(t => t.id === editingTurmaId);
+      const shiftChanged = oldTurma && oldTurma.shift !== newTurmaShift;
+      
       setTurmas(prev => prev.map(t => t.id === editingTurmaId 
         ? { ...t, name: newTurmaName, shift: newTurmaShift } 
         : t
       ));
+
+      if (shiftChanged) {
+        setSchedules(prev => {
+          const next = { ...prev };
+          if (next[editingTurmaId]) {
+            next[editingTurmaId] = remapScheduleIfNecessary({ id: editingTurmaId, shift: newTurmaShift } as Turma, next[editingTurmaId]);
+          }
+          return next;
+        });
+      }
       setEditingTurmaId(null);
     } else {
       const newTurma = { 
@@ -989,7 +1059,7 @@ export default function ScheduleGenerator() {
               body { 
                 font-family: 'Inter', sans-serif; 
                 margin: 0; 
-                padding: 0; 
+                padding: 7px; 
                 background: white; 
                 height: 210mm;
                 overflow: hidden;
@@ -1130,7 +1200,7 @@ export default function ScheduleGenerator() {
               body { 
                 font-family: 'Inter', sans-serif; 
                 margin: 0; 
-                padding: 0; 
+                padding: 7px; 
                 background: white; 
                 color: black;
                 -webkit-print-color-adjust: exact; 
@@ -1277,7 +1347,7 @@ export default function ScheduleGenerator() {
               body { 
                 font-family: 'Inter', sans-serif; 
                 margin: 0; 
-                padding: 0; 
+                padding: 7px; 
                 background: white; 
                 height: 287mm;
                 overflow: hidden;
@@ -2346,9 +2416,9 @@ export default function ScheduleGenerator() {
                       
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Selecione as Disciplinas</label>
-                        <div className="max-h-32 overflow-y-auto border border-slate-100 rounded-xl p-2 space-y-1 custom-scrollbar bg-slate-50">
+                        <div className="flex flex-wrap gap-1.5 border border-slate-100 rounded-xl p-2 bg-slate-50 transition-all">
                           {subjects.map(s => (
-                            <label key={s.id} className="flex items-center gap-2 p-2 hover:bg-white rounded-lg cursor-pointer transition-all border border-transparent hover:border-slate-100 group">
+                            <label key={s.id} className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded-lg cursor-pointer transition-all hover:border-[#657c36] hover:bg-[#657c36]/5 group">
                               <input 
                                 type="checkbox"
                                 checked={newTeacherSubjectIds.includes(s.id)}
@@ -2359,9 +2429,9 @@ export default function ScheduleGenerator() {
                                     setNewTeacherSubjectIds(newTeacherSubjectIds.filter(id => id !== s.id));
                                   }
                                 }}
-                                className="w-4 h-4 rounded-md border-slate-300 text-[#657c36] focus:ring-[#657c36]"
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-[#657c36] focus:ring-[#657c36]"
                               />
-                              <span className="text-xs font-bold text-slate-700 group-hover:text-slate-900">{s.name}</span>
+                              <span className="text-[10px] font-black text-slate-600 uppercase group-hover:text-slate-900 tracking-tight">{s.name}</span>
                             </label>
                           ))}
                         </div>
@@ -2545,7 +2615,7 @@ export default function ScheduleGenerator() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl space-y-6"
+              className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar"
             >
               <div className="flex justify-between items-center">
                 <h3 className="text-xl font-black text-slate-900 uppercase">
@@ -2646,13 +2716,12 @@ export default function ScheduleGenerator() {
                       <motion.div 
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
-                        className="mt-3 space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar border-l-2 border-slate-100 pl-3 pb-2"
+                        className="mt-3 space-y-2 border-l-2 border-slate-100 pl-3 pb-2"
                       >
-                        <p className="text-[9px] font-bold text-slate-400 uppercase leading-snug">
-                          Especifique a distribuição de aulas (Sala vs Lab) para cada turma caso seja diferente do padrão.
+                        <p className="text-[9px] font-bold text-slate-400 uppercase leading-snug mb-2">
+                          Caso uma turma tenha distribuição diferente do padrão ({newSubjectWorkload} aulas):
                         </p>
                         {turmas.filter(t => !t.isRoom).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric: true})).map(turma => {
-                          // Se não houver customização, o valor no input mostra o padrão global mas permitir editar
                           const custom = newSubjectCustomWorkloads[turma.id] || { 
                             workload: newSubjectWorkload, 
                             classWorkload: newSubjectClassWorkload, 
@@ -2662,25 +2731,27 @@ export default function ScheduleGenerator() {
                           const isCustomized = !!newSubjectCustomWorkloads[turma.id];
 
                           return (
-                            <div key={turma.id} className={`p-3 rounded-xl space-y-2 border ${isCustomized ? 'bg-white border-[#657c36]/30 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
-                              <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-black text-slate-700 uppercase">{turma.name}</span>
-                                {isCustomized && (
+                            <div key={turma.id} className={`p-2 rounded-lg border transition-all ${isCustomized ? 'bg-white border-[#657c36]/40 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-70 hover:opacity-100'}`}>
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[9px] font-black text-slate-700 uppercase tracking-tighter">{turma.name}</span>
+                                {isCustomized ? (
                                   <button 
                                     onClick={() => {
                                       const updated = { ...newSubjectCustomWorkloads };
                                       delete updated[turma.id];
                                       setNewSubjectCustomWorkloads(updated);
                                     }}
-                                    className="text-[8px] font-bold text-red-500 uppercase hover:underline"
+                                    className="text-[7pt] font-black text-red-500 uppercase hover:text-red-700"
                                   >
-                                    Remover Customização
+                                    Limpar
                                   </button>
+                                ) : (
+                                  <span className="text-[7pt] font-bold text-slate-300 uppercase">Padrão</span>
                                 )}
                               </div>
-                              <div className="grid grid-cols-3 gap-2">
-                                <div className="space-y-1">
-                                  <span className="text-[8px] font-black text-slate-400 uppercase">Total</span>
+                              <div className="flex gap-1">
+                                <div className="flex-1 flex items-center bg-white border border-slate-200 rounded px-1.5 py-0.5">
+                                  <span className="text-[7pt] font-bold text-slate-400 mr-1">TOT</span>
                                   <input 
                                     type="number"
                                     value={custom.workload}
@@ -2691,11 +2762,11 @@ export default function ScheduleGenerator() {
                                         [turma.id]: { ...custom, workload: val }
                                       });
                                     }}
-                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs font-bold"
+                                    className="w-full bg-transparent text-[10px] font-black text-center focus:outline-none"
                                   />
                                 </div>
-                                <div className="space-y-1">
-                                  <span className="text-[8px] font-black text-slate-400 uppercase">Sala</span>
+                                <div className="flex-1 flex items-center bg-white border border-slate-200 rounded px-1.5 py-0.5">
+                                  <span className="text-[7pt] font-bold text-slate-400 mr-1">SAL</span>
                                   <input 
                                     type="number"
                                     value={custom.classWorkload}
@@ -2703,11 +2774,11 @@ export default function ScheduleGenerator() {
                                       ...newSubjectCustomWorkloads,
                                       [turma.id]: { ...custom, classWorkload: parseInt(e.target.value) || 0 }
                                     })}
-                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs font-bold"
+                                    className="w-full bg-transparent text-[10px] font-black text-center focus:outline-none"
                                   />
                                 </div>
-                                <div className="space-y-1">
-                                  <span className="text-[8px] font-black text-slate-400 uppercase">Lab</span>
+                                <div className="flex-1 flex items-center bg-white border border-slate-200 rounded px-1.5 py-0.5">
+                                  <span className="text-[7pt] font-bold text-slate-400 mr-1">LAB</span>
                                   <input 
                                     type="number"
                                     value={custom.labWorkload}
@@ -2715,7 +2786,7 @@ export default function ScheduleGenerator() {
                                       ...newSubjectCustomWorkloads,
                                       [turma.id]: { ...custom, labWorkload: parseInt(e.target.value) || 0 }
                                     })}
-                                    className="w-full px-2 py-1 bg-white border border-slate-200 rounded text-xs font-bold"
+                                    className="w-full bg-transparent text-[10px] font-black text-center focus:outline-none"
                                   />
                                 </div>
                               </div>
