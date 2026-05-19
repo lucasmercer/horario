@@ -18,7 +18,8 @@ import {
   Image as ImageIcon,
   X,
   DoorClosed,
-  ChevronDown
+  ChevronDown,
+  School
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -83,10 +84,13 @@ export default function ScheduleGenerator() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [schedules, setSchedules] = useState<AllSchedules>({});
-  const [version, setVersion] = useState<number>(67);
+  const [version, setVersion] = useState<number>(70);
   const [logoUrl, setLogoUrl] = useState<string>('http://lucasleniar.com.br/mint/civico.png');
   const [showLogoInput, setShowLogoInput] = useState(false);
   const [tempLogoUrl, setTempLogoUrl] = useState('');
+  const [schoolName, setSchoolName] = useState<string>('CECM GREGÓRIO SZEREMETA');
+  const [showSchoolInput, setShowSchoolInput] = useState(false);
+  const [tempSchoolName, setTempSchoolName] = useState('');
   
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [viewMode, setViewMode] = useState<'turmas' | 'rooms'>('turmas');
@@ -181,17 +185,20 @@ export default function ScheduleGenerator() {
     })
   );
 
-  // Initialize version and logo on mount
+  // Initialize version, logo and school name on mount
   useEffect(() => {
     const savedLogo = localStorage.getItem('cecm_logo_url');
     if (savedLogo) setLogoUrl(savedLogo);
     
+    const savedSchoolName = localStorage.getItem('cecm_school_name');
+    if (savedSchoolName) setSchoolName(savedSchoolName);
+    
     const savedVersion = localStorage.getItem('cecm_version');
     if (savedVersion) {
       const v = parseInt(savedVersion);
-      setVersion(v < 67 ? 67 : v);
+      setVersion(v < 70 ? 70 : v);
     } else {
-      setVersion(67);
+      setVersion(70);
     }
 
     const handleEsc = (e: KeyboardEvent) => {
@@ -270,12 +277,15 @@ export default function ScheduleGenerator() {
       const savedLogo = localStorage.getItem('cecm_logo_url');
       if (savedLogo) setLogoUrl(savedLogo);
       
+      const savedSchoolName = localStorage.getItem('cecm_school_name');
+      if (savedSchoolName) setSchoolName(savedSchoolName);
+      
       const savedVersion = localStorage.getItem('cecm_version');
       if (savedVersion) {
         const v = parseInt(savedVersion);
-        setVersion(v < 67 ? 67 : v);
+        setVersion(v < 70 ? 70 : v);
       } else {
-        setVersion(67);
+        setVersion(70);
       }
 
       if (savedTurmas) {
@@ -299,11 +309,45 @@ export default function ScheduleGenerator() {
           }
         });
 
-        if (updated) {
-          localStorage.setItem('cecm_turmas', JSON.stringify(parsedTurmas));
-        }
+        // Migrate normal turmas that have no shift
+        parsedTurmas = parsedTurmas.map((t: any) => {
+          if (!t.isRoom && !t.shift) {
+            const isNamedTarde = t.name.toLowerCase().includes('tarde');
+            t.shift = isNamedTarde ? 'tarde' : 'manha';
+            updated = true;
+          }
+          return t;
+        });
 
         setTurmas(parsedTurmas);
+
+        let loadedSchedules = {};
+        if (savedSchedules) {
+          try {
+            loadedSchedules = JSON.parse(savedSchedules);
+          } catch (e) {
+            console.error("Error parsing saved schedules", e);
+          }
+        }
+
+        // Remap schedules if we migrated any turma shift
+        const migratedSchedules: AllSchedules = {};
+        Object.keys(loadedSchedules).forEach(tid => {
+          const turma = parsedTurmas.find((t: any) => t.id === tid);
+          if (turma) {
+            migratedSchedules[tid] = remapScheduleIfNecessary(turma, loadedSchedules[tid]);
+          } else {
+            migratedSchedules[tid] = loadedSchedules[tid];
+          }
+        });
+
+        setSchedules(migratedSchedules);
+
+        if (updated) {
+          localStorage.setItem('cecm_turmas', JSON.stringify(parsedTurmas));
+          localStorage.setItem('cecm_schedules', JSON.stringify(migratedSchedules));
+        }
+
         if (parsedTurmas.length > 0) setSelectedTurmaId(parsedTurmas[0].id);
       } else {
         const specialRooms = [
@@ -314,15 +358,15 @@ export default function ScheduleGenerator() {
         const defaultTurmas = Array.from({ length: 12 }, (_, i) => ({
           id: generateId(),
           name: `${Math.floor(i/3) + 6}º Ano ${String.fromCharCode(65 + (i % 3))}`,
-          shift: 'manha'
+          shift: 'manha' as const
         }));
         const initialTurmas = [...specialRooms, ...defaultTurmas];
         setTurmas(initialTurmas);
         localStorage.setItem('cecm_turmas', JSON.stringify(initialTurmas));
         if (initialTurmas.length > 0) setSelectedTurmaId(initialTurmas[0].id);
+
+        if (savedSchedules) setSchedules(JSON.parse(savedSchedules));
       }
-      
-      if (savedSchedules) setSchedules(JSON.parse(savedSchedules));
     } catch (err) {
       console.error("Error loading data from localStorage:", err);
       // Reset corrupted data
@@ -367,7 +411,8 @@ export default function ScheduleGenerator() {
     localStorage.setItem('cecm_schedules', JSON.stringify(schedules));
     localStorage.setItem('cecm_version', version.toString());
     localStorage.setItem('cecm_logo_url', logoUrl);
-  }, [teachers, subjects, turmas, schedules, version, logoUrl]);
+    localStorage.setItem('cecm_school_name', schoolName);
+  }, [teachers, subjects, turmas, schedules, version, logoUrl, schoolName]);
 
   // Backup functions
   const handleExportData = () => {
@@ -378,6 +423,7 @@ export default function ScheduleGenerator() {
       schedules,
       version,
       logoUrl,
+      schoolName,
       exportDate: new Date().toISOString(),
       appName: "CECM-Scheduler"
     };
@@ -460,7 +506,16 @@ export default function ScheduleGenerator() {
                 return { 
                   ...t, 
                   isRoom: true, 
+                  shift: 'ambos',
                   color: t.color || (t.id === ID_LAB_INFO_COMP ? '#9333ea' : t.id === ID_LAB_INFO_TAB ? '#2563eb' : '#f97316') 
+                };
+              }
+              // Normal turmas shift migration
+              if (!t.isRoom && !t.shift) {
+                const isNamedTarde = t.name?.toLowerCase().includes('tarde');
+                return {
+                  ...t,
+                  shift: isNamedTarde ? 'tarde' : 'manha'
                 };
               }
               return t;
@@ -473,8 +528,13 @@ export default function ScheduleGenerator() {
             ];
             
             specialRooms.forEach(room => {
-              if (!importedTurmas.find((t: any) => t.id === room.id)) {
+              const existing = importedTurmas.find((t: any) => t.id === room.id);
+              if (!existing) {
                 importedTurmas.push(room);
+              } else {
+                if (!existing.isRoom) existing.isRoom = true;
+                if (!existing.shift) existing.shift = 'ambos';
+                if (!existing.color) existing.color = room.color;
               }
             });
             
@@ -495,6 +555,7 @@ export default function ScheduleGenerator() {
 
             setSchedules(normalizedSchedules);
             setLogoUrl(data.logoUrl || '');
+            setSchoolName(data.schoolName || 'CECM GREGÓRIO SZEREMETA');
             setVersion(prev => (data.version || prev) + 1);
             
             if (importedTurmas.length > 0) {
@@ -533,6 +594,7 @@ export default function ScheduleGenerator() {
     localStorage.setItem('cecm_turmas', JSON.stringify(turmas));
     localStorage.setItem('cecm_schedules', JSON.stringify(schedules));
     localStorage.setItem('cecm_logo_url', logoUrl);
+    localStorage.setItem('cecm_school_name', schoolName);
     
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
@@ -1018,7 +1080,7 @@ export default function ScheduleGenerator() {
           <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 3px;">
             ${logoUrl ? `<img src="${logoUrl}" style="height: 32px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
             <div style="text-align: left;">
-              <h1 style="font-size: 9pt; margin: 0; font-weight: 800; line-height: 1.1;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
+              <h1 style="font-size: 9pt; margin: 0; font-weight: 800; line-height: 1.1;">${schoolName.toUpperCase()}</h1>
               <h2 style="font-size: 8pt; margin: 1px 0; color: #1e293b; font-weight: 700;">HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift === 'manha' ? 'MANHÃ' : 'TARDE'})</h2>
             </div>
           </div>
@@ -1110,7 +1172,7 @@ export default function ScheduleGenerator() {
           <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 4px; border-bottom: 1pt solid black; padding-bottom: 3px;">
             ${logoUrl ? `<img src="${logoUrl}" style="height: 32px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
             <div style="text-align: center;">
-              <h1 style="margin: 0; font-size: 9pt; font-weight: 800; text-transform: uppercase;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA</h1>
+              <h1 style="margin: 0; font-size: 9pt; font-weight: 800; text-transform: uppercase;">${schoolName.toUpperCase()}</h1>
               <h2 style="margin: 0; font-size: 7.5pt; font-weight: 700; color: #334155;">CRONOGRAMA DE SALAS ESPECIAIS (LABORATÓRIOS E SALA DE MATEMÁTICA)</h2>
             </div>
           </div>
@@ -1242,7 +1304,7 @@ export default function ScheduleGenerator() {
             <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 1px;">
               ${logoUrl ? `<img src="${logoUrl}" style="height: 28px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
               <div style="text-align: center;">
-                <h1 style="font-size: 8pt; margin: 0; font-weight: 800; text-transform: uppercase;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA</h1>
+                <h1 style="font-size: 8pt; margin: 0; font-weight: 800; text-transform: uppercase;">${schoolName.toUpperCase()}</h1>
                 <h2 style="font-size: 7pt; margin: 0; font-weight: 700; color: #1e293b;">HORÁRIO DAS TURMAS - PERÍODO: ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
               </div>
             </div>
@@ -1562,7 +1624,7 @@ export default function ScheduleGenerator() {
                 Gestão de Horários
               </h1>
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 pl-4">
-                CECM Gregório Szeremeta • v{version}
+                {schoolName} • v{version}
               </span>
             </div>
 
@@ -1603,6 +1665,68 @@ export default function ScheduleGenerator() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 justify-end w-full sm:w-auto ml-auto">
+             {/* School Name Action Component */}
+             <div className="relative">
+              {showSchoolInput ? (
+                <div className="flex items-center gap-1 bg-white rounded-xl px-3 py-1.5 border-2 border-slate-900 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] animate-in zoom-in-95 duration-200">
+                  <input 
+                    type="text"
+                    value={tempSchoolName}
+                    onChange={(e) => setTempSchoolName(e.target.value)}
+                    placeholder="Nome da Escola..."
+                    className="w-48 text-[10px] font-bold focus:outline-none bg-transparent text-slate-900"
+                    autoFocus
+                    onBlur={() => {
+                      if (tempSchoolName === schoolName) setShowSchoolInput(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const val = tempSchoolName.trim() || 'CECM GREGÓRIO SZEREMETA';
+                        setSchoolName(val);
+                        window.dispatchEvent(new CustomEvent('cecm_school_name_changed', { detail: val }));
+                        setShowSchoolInput(false);
+                      }
+                      if (e.key === 'Escape') {
+                        setTempSchoolName(schoolName);
+                        setShowSchoolInput(false);
+                      }
+                    }}
+                  />
+                  <div className="flex items-center gap-1 ml-2">
+                    <button 
+                      onClick={() => { 
+                        const val = tempSchoolName.trim() || 'CECM GREGÓRIO SZEREMETA';
+                        setSchoolName(val);
+                        window.dispatchEvent(new CustomEvent('cecm_school_name_changed', { detail: val }));
+                        setShowSchoolInput(false); 
+                      }} 
+                      className="p-1 hover:bg-green-50 rounded-lg text-green-600 transition-colors"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button 
+                      onClick={() => { 
+                        setTempSchoolName(schoolName); 
+                        setShowSchoolInput(false); 
+                      }} 
+                      className="p-1 hover:bg-red-50 rounded-lg text-red-500 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => { setTempSchoolName(schoolName); setShowSchoolInput(true); }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 border-dashed border-emerald-200 text-emerald-600 hover:border-emerald-500 hover:text-emerald-700 bg-emerald-50/10"
+                  title="Alterar Nome do Colégio"
+                >
+                  <School className="w-4 h-4" />
+                  {schoolName.length > 25 ? `${schoolName.substring(0, 22)}...` : schoolName}
+                </button>
+              )}
+            </div>
+
              {/* Logo Action Component */}
              <div className="relative">
               {showLogoInput ? (
@@ -1778,7 +1902,7 @@ export default function ScheduleGenerator() {
                   <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
                     Horário {importShift === 'manha' ? 'da Manhã' : 'da Tarde'} {viewMode === 'rooms' ? '- SALAS/LABS' : ''}
                   </h1>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mt-1">CECM Gregório Szeremeta</p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mt-1">{schoolName}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -1945,7 +2069,7 @@ export default function ScheduleGenerator() {
 
           <div className="mt-8 text-center print:block hidden">
              <h2 className="text-xl font-bold uppercase tracking-tight">Horário Escolar: {currentTurma?.name}</h2>
-             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">CECM Gregório Szeremeta</p>
+             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mt-1">{schoolName}</p>
           </div>
         </div>
 
