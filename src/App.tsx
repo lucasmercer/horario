@@ -18,6 +18,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [schoolName, setSchoolName] = useState('CECM Gregório Szeremeta');
 
   useEffect(() => {
     // Check if previously logged in
@@ -25,6 +26,23 @@ export default function App() {
     if (auth === 'true') {
       setIsLoggedIn(true);
     }
+    
+    const savedSchoolName = localStorage.getItem('cecm_school_name');
+    if (savedSchoolName) {
+      setSchoolName(savedSchoolName);
+    }
+
+    const handleSchoolChanged = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        setSchoolName(customEvent.detail);
+      }
+    };
+
+    window.addEventListener('cecm_school_name_changed', handleSchoolChanged);
+    return () => {
+      window.removeEventListener('cecm_school_name_changed', handleSchoolChanged);
+    };
   }, []);
 
   const handleLogin = (e: FormEvent) => {
@@ -66,7 +84,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-lg font-black text-slate-900 leading-tight">Gerador de Horários</h1>
-              <p className="text-[10px] text-slate-500 font-bold tracking-tight">CECM Gregório Szeremeta</p>
+              <p className="text-[10px] text-slate-500 font-bold tracking-tight">{schoolName}</p>
             </div>
           </div>
           <button 
@@ -98,7 +116,7 @@ export default function App() {
               Horários CECM
             </h1>
             <p className="text-[12px] font-bold text-slate-400 mt-2 tracking-wide leading-tight">
-              Colégio Estadual Cívico-Militar Gregório Szeremeta
+              {schoolName}
             </p>
           </div>
 
