@@ -873,11 +873,11 @@ export default function ScheduleGenerator() {
     const html = `
       <div class="print-container">
         <div class="print-header">
-          <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 5px;">
-            ${logoUrl ? `<img src="${logoUrl}" style="height: 40px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
+          <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 3px;">
+            ${logoUrl ? `<img src="${logoUrl}" style="height: 32px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
             <div style="text-align: left;">
-              <h1 style="font-size: 10pt; margin: 0; font-weight: 800; line-height: 1.2;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
-              <h2 style="font-size: 8.5pt; margin: 2px 0; color: #1e293b; font-weight: 700;">HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift === 'manha' ? 'MANHÃ' : 'TARDE'})</h2>
+              <h1 style="font-size: 9pt; margin: 0; font-weight: 800; line-height: 1.1;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA - EFMP</h1>
+              <h2 style="font-size: 8pt; margin: 1px 0; color: #1e293b; font-weight: 700;">HORÁRIO DE AULAS - TURMA: ${turma.name} (${shift === 'manha' ? 'MANHÃ' : 'TARDE'})</h2>
             </div>
           </div>
         </div>
@@ -925,9 +925,9 @@ export default function ScheduleGenerator() {
                       </td>
                     </tr>
                     ${pIndex === 2 ? `
-                      <tr class="interval-row">
-                        <td colspan="2" class="p-time-cell" style="background: #f8fafc; font-weight: 800; font-size: 6.5pt; color: #64748b;">${shift === 'manha' ? '10h às 10h20' : '15h30 às 15h50'}</td>
-                        <td class="slot-cell" style="background: #f8fafc; text-align: center; font-weight: 800; font-size: 7.5pt; letter-spacing: 0.15em; color: #94a3b8;">INTERVALO</td>
+                      <tr class="interval-row" style="height: 12pt;">
+                        <td colspan="2" class="p-time-cell" style="background: #f8fafc; font-weight: 800; font-size: 5.5pt; color: #64748b; height: 12pt; padding: 0;">${shift === 'manha' ? '10h às 10h20' : '15h30 às 15h50'}</td>
+                        <td class="slot-cell" style="background: #f8fafc; text-align: center; font-weight: 800; font-size: 6.5pt; letter-spacing: 0.1em; color: #94a3b8; height: 12pt; padding: 0;">INTERVALO</td>
                       </tr>
                     ` : ''}
                   `;
@@ -1097,11 +1097,11 @@ export default function ScheduleGenerator() {
       return `
         <div class="print-container" style="page-break-after: always; break-after: page;">
           <div class="print-header">
-            <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 2px;">
-              ${logoUrl ? `<img src="${logoUrl}" style="height: 32px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 1px;">
+              ${logoUrl ? `<img src="${logoUrl}" style="height: 28px; width: auto; object-fit: contain;" referrerpolicy="no-referrer" />` : ''}
               <div style="text-align: center;">
-                <h1 style="font-size: 8.5pt; margin: 0; font-weight: 800; text-transform: uppercase;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA</h1>
-                <h2 style="font-size: 7.5pt; margin: 0; font-weight: 700; color: #1e293b;">HORÁRIO DAS TURMAS - PERÍODO: ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
+                <h1 style="font-size: 8pt; margin: 0; font-weight: 800; text-transform: uppercase;">COLÉGIO ESTADUAL CÍVICO-MILITAR GREGÓRIO SZEREMETA</h1>
+                <h2 style="font-size: 7pt; margin: 0; font-weight: 700; color: #1e293b;">HORÁRIO DAS TURMAS - PERÍODO: ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
               </div>
             </div>
           </div>
@@ -1154,10 +1154,10 @@ export default function ScheduleGenerator() {
                         </td>
                       </tr>
                       ${pIndex === 2 ? `
-                        <tr class="interval-row">
-                          ${shiftTurmas.map(() => `<td class="slot-cell" style="background: #f8fafc; text-align: center; font-size: 5pt; font-weight: 800; color: #94a3b8;">INTERVALO</td>`).join('')}
-                          <td class="time-info" style="background: #f1f5f9; padding: 0;">
-                            <span class="p-time" style="font-size: 4pt; font-weight: 800; color: #64748b;">${shift === 'manha' ? '10h-10h20' : '15h30-15h50'}</span>
+                        <tr class="interval-row" style="height: 6pt;">
+                          ${shiftTurmas.map(() => `<td class="slot-cell" style="background: #f8fafc; text-align: center; font-size: 4pt; font-weight: 800; color: #94a3b8; height: 6pt; padding: 0;">INTERVALO</td>`).join('')}
+                          <td class="time-info" style="background: #f1f5f9; padding: 0; height: 6pt;">
+                            <span class="p-time" style="font-size: 3.5pt; font-weight: 800; color: #64748b; line-height: 1;">${shift === 'manha' ? '10h-10h20' : '15h30-15h50'}</span>
                           </td>
                         </tr>
                       ` : ''}
@@ -1268,22 +1268,22 @@ export default function ScheduleGenerator() {
               
               .slot-cell { 
                 overflow: hidden;
-                height: 16pt; 
-                line-height: 1.1;
+                height: 14.2pt; 
+                line-height: 1;
               }
               
               .subj-name { 
-                font-size: 6pt; 
+                font-size: 5.5pt; 
                 font-weight: 800; 
                 color: black; 
                 text-transform: uppercase;
-                line-height: 1.1;
+                line-height: 1;
                 white-space: nowrap;
                 overflow: hidden;
               }
               
               .prof-name { 
-                font-size: 5.5pt; 
+                font-size: 5pt; 
                 color: black; 
                 line-height: 1;
                 white-space: nowrap;
