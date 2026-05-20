@@ -2027,7 +2027,7 @@ export default function ScheduleGenerator() {
                   const subject = subjects.find(s => s.id === slot?.subjectId);
                   
                   const isGrayDay = day.id === 'ter' || day.id === 'qui';
-                  const rowBgStyle = isGrayDay ? 'background-color: #e2e8f0 !important;' : 'background-color: #ffffff !important;';
+                  const rowBgStyle = isGrayDay ? 'background-color: #d5dee8 !important;' : 'background-color: #ffffff !important;';
                   
                   return `
                     <tr class="${pIndex === 5 ? 'day-end' : ''}" style="${rowBgStyle}">
@@ -2108,7 +2108,7 @@ export default function ScheduleGenerator() {
                 ${DAYS.map(day => periods.map((pId, pIdx) => {
                   const slotId = `${day.id}-${pId}`;
                   const isGrayDay = day.id === 'ter' || day.id === 'qui';
-                  const rowBgStyle = isGrayDay ? 'background-color: #e2e8f0 !important;' : 'background-color: #ffffff !important;';
+                  const rowBgStyle = isGrayDay ? 'background-color: #d5dee8 !important;' : 'background-color: #ffffff !important;';
                   return `
                     <tr style="${rowBgStyle} ${pIdx === 5 ? 'border-bottom: 1.2pt solid black !important;' : ''}">
                       ${pIdx === 0 ? `<td rowspan="7" class="day-cell" style="background-color: ${day.printBg} !important; color: ${day.printText} !important; border-right: 2px solid ${day.printText} !important;"><span style="color: ${day.printText} !important;">${day.label}</span></td>` : ''}
@@ -2387,7 +2387,7 @@ export default function ScheduleGenerator() {
                     const pName = `${pIndex + 1}ª`;
                     const time = currentTimeRanges[pIndex];
                     const isGrayDay = day.id === 'ter' || day.id === 'qui';
-                    const rowBgStyle = isGrayDay ? 'background-color: #e2e8f0 !important;' : 'background-color: #ffffff !important;';
+                    const rowBgStyle = isGrayDay ? 'background-color: #d5dee8 !important;' : 'background-color: #ffffff !important;';
                     
                     return `
                       <tr class="${pIndex === 5 ? 'day-end' : ''}" style="${rowBgStyle}">
@@ -3075,7 +3075,7 @@ export default function ScheduleGenerator() {
                   </tr>
                 </thead>
                 <tbody>
-                      {DAYS.map((day) => (
+                  {DAYS.map((day) => (
                     <React.Fragment key={day.id}>
                       {(importShift === 'noite' ? PERIODS_NOITE : importShift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE).map((actualPeriod, pIndex) => {
                         const timeRange = importShift === 'noite'
@@ -3084,55 +3084,56 @@ export default function ScheduleGenerator() {
                             ? ["7h30-8h20", "8h20-9h10", "9h10-10h", "10h20-11h10", "11h10-12h", "12h-12h50"][pIndex]
                             : ["13h-13h50", "13h50-14h40", "14h40-15h30", "15h50-16h40", "16h40-17h30", "17h30-18h20"][pIndex];
 
+                        const isGrayDay = day.id === 'ter' || day.id === 'qui';
+
                         return (
                           <React.Fragment key={`${day.id}-${actualPeriod}`}>
                             <tr className={`border-b border-slate-200 hover:bg-slate-50 transition-colors h-14 ${pIndex === 5 ? 'border-b-[3px] border-slate-900' : ''}`}>
                               {/* Day Column (Sticky Left) */}
-                                {pIndex === 0 && (
-                                  <td rowSpan={7} className={`${day.screenBg} text-white p-0 w-10 min-w-[40px] max-w-[40px] border-r-2 border-slate-900 sticky left-0 z-40 shadow-[2px_0_10px_rgba(0,0,0,0.1)]`}>
-                                    <div className="flex items-center justify-center h-full w-full">
-                                      <span className="text-[10px] font-black uppercase [writing-mode:vertical-lr] rotate-180 text-center tracking-widest whitespace-nowrap">
-                                        {day.label}
-                                      </span>
-                                    </div>
-                                  </td>
-                                )}
-                                
-                                {(viewMode === 'turmas' ? displayedTurmas : turmas.filter(t => t.isRoom)).map(turma => {
-                                  const slotId = `${day.id}-${actualPeriod}`;
-                                  const slot = schedules[turma.id]?.[slotId];
-                                  const teacher = teachers.find(t => t.id === slot?.teacherId);
-                                  const subject = subjects.find(s => s.id === slot?.subjectId);
-                                  const associatedTurma = turmas.find(t => t.id === slot?.associatedTurmaId);
-                                  const conflicts = getConflicts(day.id, actualPeriod, slot?.teacherId || '', turma.id);
+                              {pIndex === 0 && (
+                                <td rowSpan={7} className={`${day.screenBg} text-white p-0 w-10 min-w-[40px] max-w-[40px] border-r-2 border-slate-900 sticky left-0 z-40 shadow-[2px_0_10px_rgba(0,0,0,0.1)]`}>
+                                  <div className="flex items-center justify-center h-full w-full">
+                                    <span className="text-[10px] font-black uppercase [writing-mode:vertical-lr] rotate-180 text-center tracking-widest whitespace-nowrap">
+                                      {day.label}
+                                    </span>
+                                  </div>
+                                </td>
+                              )}
+                              
+                              {(viewMode === 'turmas' ? displayedTurmas : turmas.filter(t => t.isRoom)).map(turma => {
+                                const slotId = `${day.id}-${actualPeriod}`;
+                                const slot = schedules[turma.id]?.[slotId];
+                                const teacher = teachers.find(t => t.id === slot?.teacherId);
+                                const subject = subjects.find(s => s.id === slot?.subjectId);
+                                const associatedTurma = turmas.find(t => t.id === slot?.associatedTurmaId);
+                                const conflicts = getConflicts(day.id, actualPeriod, slot?.teacherId || '', turma.id);
 
-                                  const isGrayDay = day.id === 'ter' || day.id === 'qui';
-                                  const cellBg = conflicts.length > 0 
-                                    ? 'bg-red-50 hover:bg-red-100' 
-                                    : slot 
-                                      ? viewMode === 'rooms' 
-                                        ? 'bg-indigo-50 hover:bg-indigo-100' 
-                                        : isGrayDay 
-                                          ? 'bg-slate-200 hover:bg-slate-300 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.1)] border border-slate-300'
-                                          : 'bg-white hover:bg-slate-50 shadow-[0_1.5px_3px_rgba(0,0,0,0.04),_inset_0_0_0_1px_rgba(0,0,0,0.02)] border border-slate-100'
+                                const cellBg = conflicts.length > 0 
+                                  ? 'bg-red-50 hover:bg-red-100' 
+                                  : slot 
+                                    ? viewMode === 'rooms' 
+                                      ? 'bg-indigo-50 hover:bg-indigo-100' 
                                       : isGrayDay 
-                                        ? 'bg-slate-100/80 hover:bg-slate-200/50'
-                                        : 'bg-white hover:bg-slate-50/55';
+                                        ? 'bg-[#d5dee8] hover:bg-[#c1cbd6] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.15)] border border-slate-400'
+                                        : 'bg-white hover:bg-slate-50 shadow-[0_1.5px_3px_rgba(0,0,0,0.04),_inset_0_0_0_1px_rgba(0,0,0,0.02)] border border-slate-100'
+                                    : isGrayDay 
+                                      ? 'bg-[#d5dee8]/80 hover:bg-[#d5dee8]'
+                                      : 'bg-white hover:bg-slate-50/55';
 
-                                  return (
-                                    <td 
-                                      key={turma.id}
-                                      onClick={() => handleSlotClick(day.id, actualPeriod, turma.id)}
-                                      className={`p-1.5 border-r border-slate-200 cursor-pointer transition-all group relative ${cellBg}`}
-                                    >
-                                      {slot ? (
-                                        <div className="flex flex-col items-center justify-center text-center overflow-hidden">
-                      <span className={`text-[10px] font-black uppercase leading-[1.1] mb-0.5 ${conflicts.length > 0 ? 'text-red-600' : viewMode === 'rooms' ? 'text-indigo-900' : 'text-slate-800'}`}>
-                        {viewMode === 'rooms' ? associatedTurma?.name || 'N/A' : subject?.name}
-                      </span>
-                                          <span className={`text-[8px] font-bold uppercase truncate w-full ${viewMode === 'rooms' ? 'text-indigo-400' : 'text-slate-400'}`}>
-                                            {teacher?.name} {viewMode === 'rooms' && subject ? `• ${subject.name}` : ''}
-                                          </span>
+                                return (
+                                  <td 
+                                    key={turma.id}
+                                    onClick={() => handleSlotClick(day.id, actualPeriod, turma.id)}
+                                    className={`p-1.5 border-r border-slate-200 cursor-pointer transition-all group relative ${cellBg}`}
+                                  >
+                                    {slot ? (
+                                      <div className="flex flex-col items-center justify-center text-center overflow-hidden">
+                                        <span className={`text-[10px] font-black uppercase leading-[1.1] mb-0.5 ${conflicts.length > 0 ? 'text-red-600' : viewMode === 'rooms' ? 'text-indigo-900' : isGrayDay ? 'text-[#000000]' : 'text-slate-800'}`}>
+                                          {viewMode === 'rooms' ? associatedTurma?.name || 'N/A' : subject?.name}
+                                        </span>
+                                        <span className={`text-[8px] font-bold uppercase truncate w-full ${viewMode === 'rooms' ? 'text-indigo-400' : isGrayDay ? 'text-[#2f2f2f]' : 'text-slate-400'}`}>
+                                          {teacher?.name} {viewMode === 'rooms' && subject ? `• ${subject.name}` : ''}
+                                        </span>
                                         {conflicts.length > 0 && (
                                           <div className="absolute top-0.5 right-0.5">
                                             <AlertCircle className="w-2.5 h-2.5 text-red-500 fill-white" />
@@ -3147,31 +3148,31 @@ export default function ScheduleGenerator() {
                                   </td>
                                 );
                               })}
-                              <td className="p-1.5 border-l border-slate-400 bg-slate-50 sticky right-0 z-10 shadow-[-2px_0_5px_rgba(0,0,0,0.05)] w-28">
+                              <td className={`p-1.5 border-l border-slate-400 sticky right-0 z-10 shadow-[-2px_0_5px_rgba(0,0,0,0.05)] w-28 ${isGrayDay ? 'bg-[#d5dee8]' : 'bg-slate-50'}`}>
                                 <div className="flex flex-col items-center justify-center gap-0.5">
-                                  <span className={`text-[9px] font-black uppercase shrink-0 ${importShift === 'noite' ? 'text-indigo-600' : importShift === 'manha' ? 'text-blue-600' : 'text-red-500'}`}>
+                                  <span className={`text-[9px] font-black uppercase shrink-0 ${isGrayDay ? 'text-[#000000]' : importShift === 'noite' ? 'text-indigo-600' : importShift === 'manha' ? 'text-blue-600' : 'text-red-500'}`}>
                                     {pIndex + 1}ª aula
                                   </span>
-                                  <span className="text-[8px] font-bold text-slate-400 whitespace-nowrap">
+                                  <span className={`text-[8px] font-bold whitespace-nowrap ${isGrayDay ? 'text-[#2f2f2f]' : 'text-slate-400'}`}>
                                     {timeRange}
                                   </span>
                                 </div>
                               </td>
                             </tr>
                             {pIndex === 2 && (
-                               <tr className="border-b border-slate-300 bg-slate-50/50 h-8">
-                                 {(viewMode === 'turmas' ? displayedTurmas : turmas.filter(t => t.isRoom)).map(turma => (
-                                   <td key={`intervalo-${turma.id}`} className="border-r border-slate-200 text-center">
-                                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Intervalo</span>
-                                   </td>
-                                 ))}
-                                 <td className="p-1 border-l border-slate-400 bg-slate-100 sticky right-0 z-10 shadow-[-2px_0_5px_rgba(0,0,0,0.05)]">
-                                   <div className="flex flex-col items-center justify-center">
-                                      <span className="text-[8px] font-black text-slate-400 uppercase leading-none">Intervalo</span>
-                                      <span className="text-[7px] font-bold text-slate-500 mt-0.5">{importShift === 'noite' ? '21h15 - 21h25' : importShift === 'manha' ? '10h - 10h20' : '15h30 - 15h50'}</span>
-                                   </div>
-                                 </td>
-                               </tr>
+                              <tr className={`border-b border-slate-300 h-8 ${isGrayDay ? 'bg-[#d5dee8]/60' : 'bg-slate-50/50'}`}>
+                                {(viewMode === 'turmas' ? displayedTurmas : turmas.filter(t => t.isRoom)).map(turma => (
+                                  <td key={`intervalo-${turma.id}`} className="border-r border-slate-200 text-center">
+                                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Intervalo</span>
+                                  </td>
+                                ))}
+                                <td className={`p-1 border-l border-slate-400 sticky right-0 z-10 shadow-[-2px_0_5px_rgba(0,0,0,0.05)] ${isGrayDay ? 'bg-[#d5dee8]' : 'bg-slate-100'}`}>
+                                  <div className="flex flex-col items-center justify-center">
+                                    <span className={`text-[8px] font-black uppercase leading-none ${isGrayDay ? 'text-[#2f2f2f]' : 'text-slate-400'}`}>Intervalo</span>
+                                    <span className={`text-[7px] font-bold mt-0.5 ${isGrayDay ? 'text-[#000000]' : 'text-slate-500'}`}>{importShift === 'noite' ? '21h15 - 21h25' : importShift === 'manha' ? '10h - 10h20' : '15h30 - 15h50'}</span>
+                                  </div>
+                                </td>
+                              </tr>
                             )}
                           </React.Fragment>
                         );
