@@ -954,6 +954,37 @@ export default function ScheduleGenerator() {
         if (!teacher.availability.includes(slotId)) return false;
       }
       
+      // Se o professor não quiser aulas geminadas, não permite que essa aula seja consecutiva (vizinha) a outra dele na mesma turma
+      if (teacher && teacher.preferDoubleClasses === false) {
+        const prevSlotId = `${day}-${p - 1}`;
+        const nextSlotId = `${day}-${p + 1}`;
+        
+        // Verificação na própria grade da turma (auxiliar)
+        const prevSlot = currentSchedules[g.turmaId]?.[prevSlotId];
+        const nextSlot = currentSchedules[g.turmaId]?.[nextSlotId];
+        if (prevSlot && prevSlot.teacherId === g.teacherId && prevSlot.subjectId === g.subjectId) {
+          return false;
+        }
+        if (nextSlot && nextSlot.teacherId === g.teacherId && nextSlot.subjectId === g.subjectId) {
+          return false;
+        }
+        
+        // Verificação em laboratórios que atendem a essa turma no slot anterior ou seguinte
+        for (const tid in currentSchedules) {
+          const room = turmas.find(t => t.id === tid);
+          if (room?.isRoom) {
+            const pRoomSlot = currentSchedules[tid]?.[prevSlotId];
+            if (pRoomSlot && pRoomSlot.associatedTurmaId === g.turmaId && pRoomSlot.teacherId === g.teacherId && pRoomSlot.subjectId === g.subjectId) {
+              return false;
+            }
+            const nRoomSlot = currentSchedules[tid]?.[nextSlotId];
+            if (nRoomSlot && nRoomSlot.associatedTurmaId === g.turmaId && nRoomSlot.teacherId === g.teacherId && nRoomSlot.subjectId === g.subjectId) {
+              return false;
+            }
+          }
+        }
+      }
+      
       for (const tid in currentSchedules) {
         const slot = currentSchedules[tid]?.[slotId];
         if (slot && slot.teacherId === g.teacherId) {
@@ -985,24 +1016,34 @@ export default function ScheduleGenerator() {
     const getPossiblePlacementsForGroup = (g: LessonGroup) => {
       const list: { day: string; periods: number[] }[] = [];
       const pList = g.shift === 'tarde' ? [7,8,9,10,11,12] : [1,2,3,4,5,6];
+      const teacher = teachers.find(t => t.id === g.teacherId);
+      const hasAvailability = teacher?.availability && teacher.availability.length > 0;
       
       DAYS.forEach(day => {
         if (g.size === 1) {
           pList.forEach(p => {
-            list.push({ day: day.id, periods: [p] });
+            const slotId = `${day.id}-${p}`;
+            // Só adiciona se o professor não tiver restrição de disponibilidade, ou se este slot estiver explicitamente no seu array de disponíveis
+            if (!hasAvailability || (teacher?.availability && teacher.availability.includes(slotId))) {
+              list.push({ day: day.id, periods: [p] });
+            }
           });
         } else if (g.size === 2) {
+          let pairs: number[][] = [];
           if (g.shift === 'manha') {
-            list.push({ day: day.id, periods: [1, 2] });
-            list.push({ day: day.id, periods: [2, 3] });
-            list.push({ day: day.id, periods: [4, 5] });
-            list.push({ day: day.id, periods: [5, 6] });
+            pairs = [[1, 2], [2, 3], [4, 5], [5, 6]];
           } else {
-            list.push({ day: day.id, periods: [7, 8] });
-            list.push({ day: day.id, periods: [8, 9] });
-            list.push({ day: day.id, periods: [10, 11] });
-            list.push({ day: day.id, periods: [11, 12] });
+            pairs = [[7, 8], [8, 9], [10, 11], [11, 12]];
           }
+          
+          pairs.forEach(pair => {
+            const slot1 = `${day.id}-${pair[0]}`;
+            const slot2 = `${day.id}-${pair[1]}`;
+            // Só adiciona se o professor estiver plenamente disponível nos dois horários geminados
+            if (!hasAvailability || (teacher?.availability && teacher.availability.includes(slot1) && teacher.availability.includes(slot2))) {
+              list.push({ day: day.id, periods: pair });
+            }
+          });
         }
       });
       return list;
