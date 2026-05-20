@@ -22,7 +22,9 @@ import {
   School,
   Sparkles,
   Wand2,
-  AlertTriangle
+  AlertTriangle,
+  HelpCircle,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -46,6 +48,10 @@ interface Subject {
   classWorkload?: number;
   roomIds?: string[];
   customWorkloads?: Record<string, { workload: number; classWorkload: number; labWorkload: number }>;
+  levelConstraint?: 'ambos' | 'fundamental' | 'medio';
+  gradeConstraint?: string;
+  suffixConstraint?: string;
+  allowedTurmaIds?: string[];
 }
 
 interface Turma {
@@ -137,6 +143,10 @@ export default function ScheduleGenerator() {
   const [showCustomWorkloads, setShowCustomWorkloads] = useState(false);
   const [newSubjectClassWorkload, setNewSubjectClassWorkload] = useState<number>(0);
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [newSubjectLevelConstraint, setNewSubjectLevelConstraint] = useState<'ambos' | 'fundamental' | 'medio'>('ambos');
+  const [newSubjectGradeConstraint, setNewSubjectGradeConstraint] = useState('');
+  const [newSubjectSuffixConstraint, setNewSubjectSuffixConstraint] = useState('');
+  const [newSubjectAllowedTurmaIds, setNewSubjectAllowedTurmaIds] = useState<string[]>([]);
   
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [tempTeacher, setTempTeacher] = useState('');
@@ -169,6 +179,8 @@ export default function ScheduleGenerator() {
   const [isPrintingTurmaSelection, setIsPrintingTurmaSelection] = useState(false);
   const [isClearingSelection, setIsClearingSelection] = useState(false);
   const [isShowingMissingClasses, setIsShowingMissingClasses] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [helpActiveTab, setHelpActiveTab] = useState('geral');
   const [missingClassesSearch, setMissingClassesSearch] = useState('');
   const [missingClassesShift, setMissingClassesShift] = useState<'todos' | 'manha' | 'tarde'>('todos');
   const [missingClassesOnlyPending, setMissingClassesOnlyPending] = useState(true);
@@ -685,7 +697,133 @@ export default function ScheduleGenerator() {
   }
 
   const getSubjectWorkloadsForTurma = (S: Subject, TId: string) => {
+    const T = turmas.find(t => t.id === TId);
+    if (!T || T.isRoom) return { workload: 0, classWorkload: 0, labWorkload: 0 };
+
+    const subjectNameLower = S.name.toLowerCase().trim();
+    const turmaNameUpper = T.name.toUpperCase().replace(/\s+/g, '');
+
+    // Level detection: Ensino Fundamental vs. Ensino Médio
+    // Standard Brazilian Fundamental II classes: 6º, 7º, 8º, 9º
+    const isFundamental = /\b(6|7|8|9)\b|\b(6|7|8|9)º/i.test(T.name) || 
+                          T.name.toLowerCase().includes('fundamental') || 
+                          T.name.toLowerCase().includes('6º') || 
+                          T.name.toLowerCase().includes('7º') || 
+                          T.name.toLowerCase().includes('8º') || 
+                          T.name.toLowerCase().includes('9º');
+                          
+    // High School (Ensino Médio) groups standardly: 1º, 2º, 3º of secondary education
+    const isMedio = (/\b(1|2|3)\b|\b(1|2|3)º|\b(1|2|3)ª/i.test(T.name) || 
+                    T.name.toLowerCase().includes('médio') || 
+                    T.name.toLowerCase().includes('medio') || 
+                    T.name.toLowerCase().includes('e.m.') || 
+                    T.name.toLowerCase().includes('em')) && !isFundamental;
+
+    // --- DYNAMIC/CONFIGURABLE CONSTRAINTS ---
+
+    // 1. Direct whitelist of specific Turmas (if populated)
+    if (S.allowedTurmaIds && S.allowedTurmaIds.length > 0) {
+      if (!S.allowedTurmaIds.includes(TId)) {
+        return { workload: 0, classWorkload: 0, labWorkload: 0 };
+      }
+    }
+
+    // 2. School Level Constraint (Fundamental vs. Médio)
+    if (S.levelConstraint && S.levelConstraint !== 'ambos') {
+      if (S.levelConstraint === 'fundamental' && !isFundamental) {
+        return { workload: 0, classWorkload: 0, labWorkload: 0 };
+      }
+      if (S.levelConstraint === 'medio' && !isMedio) {
+        return { workload: 0, classWorkload: 0, labWorkload: 0 };
+      }
+    } else {
+      // Fallback rule for standard unconfigured legacy courses: Filosofia and Sociologia are ONLY for Ensino Médio
+      if (subjectNameLower.includes('filosofia') || subjectNameLower.includes('sociologia')) {
+        if (isFundamental || (!isMedio && T.name.startsWith('6') || T.name.startsWith('7') || T.name.startsWith('8') || T.name.startsWith('9'))) {
+          return { workload: 0, classWorkload: 0, labWorkload: 0 };
+        }
+      }
+    }
+
+    // 3. Series / Grade Constraint (e.g. "6", "6º", "1º")
+    if (S.gradeConstraint && S.gradeConstraint.trim()) {
+      const terms = S.gradeConstraint.split(',').map(term => term.trim().toLowerCase()).filter(Boolean);
+      if (terms.length > 0) {
+        const normTName = normalizeTurmaName(T.name);
+        const hasMatch = terms.some(term => {
+          const normTerm = normalizeTurmaName(term);
+          return normTName.includes(normTerm);
+        });
+        if (!hasMatch) {
+          return { workload: 0, classWorkload: 0, labWorkload: 0 };
+        }
+      }
+    } else {
+      // Fallback rule for standard unconfigured legacy courses: Ensino Religioso / Religião is strictly for 6º Ano only
+      if (subjectNameLower.includes('ensino religioso') || subjectNameLower.includes('religioso') || subjectNameLower.includes('religião') || subjectNameLower.includes('religiao')) {
+        const is6th = T.name.includes('6') || T.name.includes('6º');
+        if (!is6th) {
+          return { workload: 0, classWorkload: 0, labWorkload: 0 };
+        }
+      }
+    }
+
+    // 4. Class Suffix Constraint (e.g. "B", "A", "Integral")
+    if (S.suffixConstraint && S.suffixConstraint.trim()) {
+      const terms = S.suffixConstraint.split(',').map(term => term.trim().toUpperCase()).filter(Boolean);
+      if (terms.length > 0) {
+        const upperTName = T.name.toUpperCase();
+        const hasMatch = terms.some(term => {
+          if (upperTName.endsWith(term)) return true;
+          if (upperTName.replace(/\s+/g, '').endsWith(term.replace(/\s+/g, ''))) return true;
+          return upperTName.includes(term);
+        });
+        if (!hasMatch) {
+          return { workload: 0, classWorkload: 0, labWorkload: 0 };
+        }
+      }
+    } else {
+      // Fallback rule for standard unconfigured legacy courses: Marketing is strictly for specialized classes: 1ºB, 2ºB, 3ºB
+      if (subjectNameLower.includes('marketing')) {
+        const hasExplicitConfig = S.customWorkloads?.[TId] !== undefined && S.customWorkloads[TId].workload > 0;
+        const isAllowedMarketingTurma = /1.*B/i.test(turmaNameUpper) || 
+                                       /2.*B/i.test(turmaNameUpper) || 
+                                       /3.*B/i.test(turmaNameUpper) || 
+                                       turmaNameUpper.includes('1B') || 
+                                       turmaNameUpper.includes('2B') || 
+                                       turmaNameUpper.includes('3B');
+        
+        if (!hasExplicitConfig && !isAllowedMarketingTurma) {
+          return { workload: 0, classWorkload: 0, labWorkload: 0 };
+        }
+      }
+    }
+
+    // Universal subjects that bypass standard automatic custom exclusion checks
+    const universalSubjects = [
+      'matemática', 'matematica',
+      'português', 'portugues', 'língua portuguesa', 'lingua portuguesa', 'portugués',
+      'história', 'historia',
+      'geografia',
+      'ciências', 'ciencias',
+      'biologia',
+      'física', 'fisica',
+      'química', 'quimica',
+      'educação física', 'educacao fisica',
+      'arte', 'artes',
+      'inglês', 'ingles', 'língua inglesa', 'lingua inglesa',
+      'espanhol'
+    ];
+    
+    const isUniversal = universalSubjects.some(u => subjectNameLower.includes(u));
     const custom = S.customWorkloads?.[TId];
+    
+    // If the subject has any custom workloads configured, treat it as restricted to those specified unless it is labeled universal
+    const hasAnyCustomWorkloads = S.customWorkloads && Object.keys(S.customWorkloads).length > 0;
+    if (hasAnyCustomWorkloads && !custom && !isUniversal) {
+      return { workload: 0, classWorkload: 0, labWorkload: 0 };
+    }
+
     const workload = custom ? custom.workload : S.workload;
     let classWorkload = custom ? custom.classWorkload : (S.classWorkload ?? 0);
     let labWorkload = custom ? custom.labWorkload : (S.labWorkload ?? 0);
@@ -723,13 +861,12 @@ export default function ScheduleGenerator() {
 
     const activeTurmas = turmas.filter(t => {
       if (t.isRoom) return false;
+      const detectedShift = t.shift || (t.id.toLowerCase().includes('tarde') || t.name.toLowerCase().includes('tarde') ? 'tarde' : 'manha');
       if (autoGenShift === 'manha') {
-        const tShift = t.shift || 'manha';
-        return tShift === 'manha' || tShift === 'ambos';
+        return detectedShift === 'manha' || detectedShift === 'ambos';
       }
       if (autoGenShift === 'tarde') {
-        const tShift = t.shift || 'manha';
-        return tShift === 'tarde' || tShift === 'ambos';
+        return detectedShift === 'tarde' || detectedShift === 'ambos';
       }
       return true; // For 'both' or 'labs'
     });
@@ -778,7 +915,7 @@ export default function ScheduleGenerator() {
     }[] = [];
 
     activeTurmas.forEach(T => {
-      const isAfternoon = T.shift === 'tarde';
+      const isAfternoon = T.shift === 'tarde' || T.id.toLowerCase().includes('tarde') || T.name.toLowerCase().includes('tarde');
       const classShift: 'manha' | 'tarde' = isAfternoon ? 'tarde' : 'manha';
 
       subjects.forEach(S => {
@@ -1320,7 +1457,11 @@ export default function ScheduleGenerator() {
       roomIds: newSubjectRoomIds,
       labWorkload: newSubjectLabWorkload,
       classWorkload: newSubjectClassWorkload,
-      customWorkloads: newSubjectCustomWorkloads
+      customWorkloads: newSubjectCustomWorkloads,
+      levelConstraint: newSubjectLevelConstraint,
+      gradeConstraint: newSubjectGradeConstraint,
+      suffixConstraint: newSubjectSuffixConstraint,
+      allowedTurmaIds: newSubjectAllowedTurmaIds
     };
 
     if (editingSubjectId) {
@@ -1346,6 +1487,10 @@ export default function ScheduleGenerator() {
     setNewSubjectRoomIds([]);
     setNewSubjectLabWorkload(0);
     setNewSubjectClassWorkload(0);
+    setNewSubjectLevelConstraint('ambos');
+    setNewSubjectGradeConstraint('');
+    setNewSubjectSuffixConstraint('');
+    setNewSubjectAllowedTurmaIds([]);
   };
 
   const startEditSubject = (subject: Subject) => {
@@ -1359,6 +1504,10 @@ export default function ScheduleGenerator() {
     setNewSubjectLabWorkload(subject.labWorkload || 0);
     setNewSubjectClassWorkload(subject.classWorkload || 0);
     setNewSubjectCustomWorkloads(subject.customWorkloads || {});
+    setNewSubjectLevelConstraint(subject.levelConstraint || 'ambos');
+    setNewSubjectGradeConstraint(subject.gradeConstraint || '');
+    setNewSubjectSuffixConstraint(subject.suffixConstraint || '');
+    setNewSubjectAllowedTurmaIds(subject.allowedTurmaIds || []);
   };
 
   const removeTeacher = (id: string) => {
@@ -1579,6 +1728,16 @@ export default function ScheduleGenerator() {
       // Workload Validation
       const subject = subjects.find(s => s.id === tempSubject);
       if (subject) {
+        // Curriculum mapping validation
+        const targetTurmaIdForValidation = viewMode === 'rooms' ? tempAssociatedTurmaId : selectedTurmaId;
+        const workloads = getSubjectWorkloadsForTurma(subject, targetTurmaIdForValidation);
+        if (workloads.workload === 0) {
+          const targetTurmaObj = turmas.find(t => t.id === targetTurmaIdForValidation);
+          const turmaName = targetTurmaObj ? targetTurmaObj.name : targetTurmaIdForValidation;
+          setSlotError(`Erro: A disciplina "${subject.name}" não faz parte da grade curricular da turma "${turmaName}".`);
+          return;
+        }
+
         const usage = getWorkloadUsage(tempSubject);
         const currentSlotData = currentSchedule[selectedSlot] as ScheduleSlot;
         const consecSlotData = (allocateConsecutive && consecSlot) ? (currentSchedule[consecSlot] as ScheduleSlot) : null;
@@ -1665,10 +1824,7 @@ export default function ScheduleGenerator() {
       }
     });
 
-    const custom = subject.customWorkloads?.[actualTurmaId];
-    const total = custom ? custom.workload : subject.workload;
-    const cTotal = custom ? custom.classWorkload : (subject.classWorkload || 0);
-    const lTotal = custom ? custom.labWorkload : (subject.labWorkload || 0);
+    const { workload: total, classWorkload: cTotal, labWorkload: lTotal } = getSubjectWorkloadsForTurma(subject, actualTurmaId);
 
     return { 
       usage: classroomUsage + labUsage, 
@@ -1697,10 +1853,7 @@ export default function ScheduleGenerator() {
       }
     });
 
-    const custom = subject.customWorkloads?.[turmaId];
-    const total = custom ? custom.workload : subject.workload;
-    const cTotal = custom ? custom.classWorkload : (subject.classWorkload || 0);
-    const lTotal = custom ? custom.labWorkload : (subject.labWorkload || 0);
+    const { workload: total, classWorkload: cTotal, labWorkload: lTotal } = getSubjectWorkloadsForTurma(subject, turmaId);
 
     return { 
       usage: classroomUsage + labUsage, 
@@ -2582,15 +2735,30 @@ export default function ScheduleGenerator() {
               Gerar Automaticamente
             </button>
 
-            <button 
-              onClick={handleSave}
-              className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 border-slate-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[0px] active:translate-y-[0px] active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                isSaved ? 'bg-green-500 text-white border-green-700' : 'bg-indigo-600 text-white border-indigo-900'
-              }`}
-            >
-              {isSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-              {isSaved ? 'Gravado!' : 'Salvar Alterações'}
-            </button>
+            <div className="flex flex-col gap-1.5">
+              <button 
+                id="btn-help-guide"
+                onClick={() => {
+                  setHelpActiveTab('geral');
+                  setIsHelpModalOpen(true);
+                }}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-400 border-2 border-slate-900 rounded-xl text-[9px] font-black uppercase tracking-wider text-slate-900 hover:bg-amber-500 hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[0px] active:translate-y-[0px] active:shadow-none transition-all cursor-pointer shadow-sm"
+                title="Ajuda e Manual de Uso"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-slate-900" />
+                Dúvidas? Ver Tutorial
+              </button>
+
+              <button 
+                onClick={handleSave}
+                className={`flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all border-2 border-slate-900 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[0px] active:translate-y-[0px] active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                  isSaved ? 'bg-green-500 text-white border-green-700' : 'bg-indigo-600 text-white border-indigo-900'
+                }`}
+              >
+                {isSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                {isSaved ? 'Gravado!' : 'Salvar Alterações'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -4006,6 +4174,87 @@ export default function ScheduleGenerator() {
                     </div>
                   </div>
 
+                  {/* Restrições e Direcionamento Curricular */}
+                  <div className="space-y-4 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                      Direcionamento da Grade Curricular
+                    </span>
+
+                    {/* Nível de Ensino */}
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-slate-400 uppercase ml-0.5">Nível de Ensino:</label>
+                      <select
+                        value={newSubjectLevelConstraint}
+                        onChange={e => setNewSubjectLevelConstraint(e.target.value as any)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-900 transition-all cursor-pointer"
+                      >
+                        <option value="ambos">Ambos os Níveis (Ensino Médio e Fundamental)</option>
+                        <option value="fundamental">Apenas Ensino Fundamental II (6º ao 9º Ano)</option>
+                        <option value="medio">Apenas Ensino Médio (1º ao 3º Ano)</option>
+                      </select>
+                    </div>
+
+                    {/* Filtro de Série/Ano */}
+                    <div className="space-y-1 font-sans">
+                      <div className="flex justify-between items-center px-0.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase">Restringir a Séries específicas:</label>
+                        <span className="text-[8px] text-slate-400 font-bold uppercase">(Ex: 6, 7º, 1)</span>
+                      </div>
+                      <input 
+                        type="text" 
+                        value={newSubjectGradeConstraint}
+                        onChange={e => setNewSubjectGradeConstraint(e.target.value)}
+                        placeholder="Ex: 6, 6º (Separado por vírgula. Vazio = todas)"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-900 transition-all font-mono"
+                      />
+                    </div>
+
+                    {/* Suffix / Sigla */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center px-0.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase">Restringir a Sufixo/Sigla específico:</label>
+                        <span className="text-[8px] text-slate-400 font-bold uppercase">(Ex: A, B, Integral)</span>
+                      </div>
+                      <input 
+                        type="text" 
+                        value={newSubjectSuffixConstraint}
+                        onChange={e => setNewSubjectSuffixConstraint(e.target.value)}
+                        placeholder="Ex: B, Integral (Vazio = Sem filtro)"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-900 transition-all font-mono"
+                      />
+                    </div>
+
+                    {/* Checkbox Whitelist of target classes */}
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-[9px] font-black text-slate-400 uppercase ml-0.5 block">Vincular apenas a turmas selecionadas:</label>
+                      <div className="max-h-28 overflow-y-auto p-2 bg-white border border-slate-100 rounded-xl space-y-1.5 custom-scrollbar">
+                        {turmas.filter(t => !t.isRoom).map(turma => (
+                          <label key={turma.id} className="flex items-center gap-2 cursor-pointer group">
+                            <input 
+                              type="checkbox" 
+                              checked={newSubjectAllowedTurmaIds.includes(turma.id)}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setNewSubjectAllowedTurmaIds([...newSubjectAllowedTurmaIds, turma.id]);
+                                } else {
+                                  setNewSubjectAllowedTurmaIds(newSubjectAllowedTurmaIds.filter(id => id !== turma.id));
+                                }
+                              }}
+                              className="w-3.5 h-3.5 rounded border-slate-300 text-slate-800 focus:ring-slate-800 cursor-pointer"
+                            />
+                            <span className="text-[11px] font-bold text-slate-600 group-hover:text-slate-900">{turma.name}</span>
+                          </label>
+                        ))}
+                        {turmas.filter(t => !t.isRoom).length === 0 && (
+                          <span className="text-[10px] text-slate-400 font-bold block pt-1 text-center">Nenhuma turma cadastrada</span>
+                        )}
+                      </div>
+                      <span className="text-[8px] text-slate-400 font-semibold leading-normal ml-1 block leading-snug">
+                        * Deixe as turmas desmarcadas para usar as restrições automáticas de nível, série e sufixo configuradas acima.
+                      </span>
+                    </div>
+                  </div>
+
                   {(newSubjectClassWorkload + newSubjectLabWorkload) > newSubjectWorkload && (
                     <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-100 rounded-xl">
                       <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
@@ -4129,6 +4378,15 @@ export default function ScheduleGenerator() {
                            {subject.useLabTab && <span className="text-[8px] px-1 bg-emerald-50 text-emerald-700 rounded border border-emerald-100 font-bold">LAB TAB</span>}
                            {subject.useSalaMat && <span className="text-[8px] px-1 bg-blue-50 text-blue-700 rounded border border-blue-100 font-bold">SALA MAT</span>}
                            {(subject.labWorkload || 0) > 0 && <span className="text-[8px] text-slate-500 font-bold italic">{subject.labWorkload} lab / {subject.classWorkload} sala</span>}
+                           {subject.levelConstraint === 'fundamental' && <span className="text-[8px] px-1 bg-blue-50 text-blue-700 rounded border border-blue-100 font-bold">FUNDAMENTAL</span>}
+                           {subject.levelConstraint === 'medio' && <span className="text-[8px] px-1 bg-purple-50 text-purple-700 rounded border border-purple-100 font-bold">ENSINO MÉDIO</span>}
+                           {subject.gradeConstraint && <span className="text-[8px] px-1 bg-amber-50 text-amber-700 rounded border border-amber-100 font-bold">SÉRIES: {subject.gradeConstraint}</span>}
+                           {subject.suffixConstraint && <span className="text-[8px] px-1 bg-indigo-50 text-indigo-700 rounded border border-indigo-100 font-bold">SUFIXO: {subject.suffixConstraint}</span>}
+                           {subject.allowedTurmaIds && subject.allowedTurmaIds.length > 0 && (
+                             <span className="text-[8px] px-1 bg-slate-100 text-slate-700 rounded border border-slate-200 font-bold">
+                               TURMAS: {subject.allowedTurmaIds.length}
+                             </span>
+                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -4208,7 +4466,7 @@ export default function ScheduleGenerator() {
                     metricTurmas = metricTurmas.filter(t => {
                       const matchesTurma = t.name.toLowerCase().includes(searchLower);
                       const matchesSubject = subjects.some(s => {
-                        const hasThisSubject = s.customWorkloads?.[t.id] ? s.customWorkloads[t.id].workload > 0 : s.workload > 0;
+                        const hasThisSubject = getSubjectWorkloadsForTurma(s, t.id).workload > 0;
                         return hasThisSubject && s.name.toLowerCase().includes(searchLower);
                       });
                       return matchesTurma || matchesSubject;
@@ -4244,7 +4502,7 @@ export default function ScheduleGenerator() {
                       <div className="bg-slate-50 p-3.5 rounded-2xl flex flex-col">
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Aulas Distribuídas</span>
                         <span className="text-xl font-black text-green-600 leading-tight mt-1 flex items-center gap-1.5">
-                          {overallAllocated}
+                           {overallAllocated}
                           <span className="text-xs font-bold text-slate-400 font-mono">({overallCompletion}%)</span>
                         </span>
                       </div>
@@ -4269,6 +4527,52 @@ export default function ScheduleGenerator() {
                   );
                 })()}
               </div>
+
+              {/* Dynamic Alerts and Workload vs Availability Warnings Panel */}
+              {(() => {
+                const availabilityWarnings: string[] = [];
+                teachers.forEach(t => {
+                  let totalRequiredWorkload = 0;
+                  subjects.forEach(s => {
+                    if (t.subjectIds && t.subjectIds.includes(s.id)) {
+                      turmas.forEach(tu => {
+                        if (!tu.isRoom) {
+                          const teachesThisTurma = !t.turmaIds || t.turmaIds.length === 0 || t.turmaIds.includes(tu.id);
+                          if (teachesThisTurma) {
+                            const { workload } = getSubjectWorkloadsForTurma(s, tu.id);
+                            totalRequiredWorkload += workload;
+                          }
+                        }
+                      });
+                    }
+                  });
+
+                  if (totalRequiredWorkload > 0) {
+                    const availableSlotsCount = t.availability?.length || 0;
+                    if (t.availability && t.availability.length > 0 && availableSlotsCount < totalRequiredWorkload) {
+                      availabilityWarnings.push(
+                        `Conflito: O professor ${t.name} precisa lecionar ${totalRequiredWorkload} aula(s), mas tem apenas ${availableSlotsCount} slot(s) de disponibilidade cadastrados no perfil.`
+                      );
+                    }
+                  }
+                });
+
+                if (availabilityWarnings.length === 0) return null;
+
+                return (
+                  <div className="mx-6 mt-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col gap-2 shadow-sm font-sans">
+                    <div className="flex items-center gap-2 text-amber-800 font-black text-[10px] uppercase tracking-wider font-sans">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      Alertas de Conflitos e Carga Horária
+                    </div>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {availabilityWarnings.map((warn, i) => (
+                        <li key={i} className="text-xs font-bold text-slate-700 leading-normal font-sans">{warn}</li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })()}
 
               {/* Advanced Search & Filtering Controls */}
               <div className="p-4 px-6 bg-slate-50 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -4359,7 +4663,7 @@ export default function ScheduleGenerator() {
                     filteredTurmas = filteredTurmas.filter(t => {
                       const matchesTurma = t.name.toLowerCase().includes(searchLower);
                       const matchesSubject = subjects.some(s => {
-                        const hasThisSubject = s.customWorkloads?.[t.id] ? s.customWorkloads[t.id].workload > 0 : s.workload > 0;
+                        const hasThisSubject = getSubjectWorkloadsForTurma(s, t.id).workload > 0;
                         return hasThisSubject && s.name.toLowerCase().includes(searchLower);
                       });
                       return matchesTurma || matchesSubject;
@@ -4817,6 +5121,347 @@ export default function ScheduleGenerator() {
                     Fechar
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Help & Tutorial Modal */}
+      <AnimatePresence>
+        {isHelpModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl w-full max-w-4xl max-h-[85vh] shadow-2xl overflow-hidden border-2 border-slate-900 flex flex-col"
+            >
+              {/* Header */}
+              <div className="bg-amber-400 p-6 border-b-2 border-slate-900 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-xl border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <HelpCircle className="w-6 h-6 text-slate-900" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider leading-none font-sans">
+                      Central de Ajuda & Manual de Uso
+                    </h3>
+                    <p className="text-[10px] text-slate-800 font-bold uppercase tracking-wide mt-1 font-sans">
+                      Aprenda a gerenciar, calibrar e gerar a grade horária ideal
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsHelpModalOpen(false)} 
+                  className="p-2 bg-white rounded-full hover:bg-slate-50 text-slate-900 border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer hover:translate-y-[-1px] hover:translate-x-[-1px] active:translate-y-0 active:translate-x-0 active:shadow-none"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body Content */}
+              <div className="flex flex-1 overflow-hidden min-h-0 bg-slate-50">
+                {/* Tabs Sidebar */}
+                <div className="w-1/4 max-w-[240px] border-r-2 border-slate-100 bg-white p-4 space-y-1.5 overflow-y-auto shrink-0 custom-scrollbar">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block px-2 mb-2 font-sans">Tópicos do Manual</span>
+                  
+                  {[
+                    { id: 'geral', label: '1. Visão Geral', icon: School },
+                    { id: 'disciplinas', label: '2. Regras Curriculares', icon: BookOpen },
+                    { id: 'professores', label: '3. Professores', icon: Users },
+                    { id: 'turmas_salas', label: '4. Turmas & Salas', icon: Calendar },
+                    { id: 'geracao', label: '5. Gerador Inteligente', icon: Sparkles },
+                    { id: 'validacoes', label: '6. Diagnósticos', icon: AlertTriangle }
+                  ].map(tab => {
+                    const TabIcon = tab.icon;
+                    const isActive = helpActiveTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setHelpActiveTab(tab.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-wider text-left transition-all border-2 cursor-pointer ${
+                          isActive 
+                            ? 'bg-slate-900 text-amber-400 border-slate-900 shadow-sm' 
+                            : 'bg-transparent text-slate-600 border-transparent hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <TabIcon className={`w-4 h-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-400'}`} />
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Content Area */}
+                <div className="flex-1 p-6 overflow-y-auto bg-white custom-scrollbar">
+                  {helpActiveTab === 'geral' && (
+                    <div className="space-y-4 animate-in fade-in duration-200">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 border-b-2 border-slate-100 pb-2">
+                        <School className="w-4 h-4 text-indigo-600 animate-bounce" />
+                        1. Visão Geral do Sistema
+                      </h4>
+                      <div className="space-y-3 text-xs text-slate-600 font-sans leading-relaxed">
+                        <p>
+                          Bem-vindo ao sistema de <strong>Planejamento e Otimização Inteligente de Grade Horária</strong>. Esta aplicação foi estruturada especificamente para atender as exigências complexas de colégios, conciliando turmas de Ensino Fundamental II e Ensino Médio, restrições físicas de laboratórios e calendários flexíveis de professores.
+                        </p>
+                        <p>
+                          A tela principal se divide em áreas fundamentais de uso dinâmico:
+                        </p>
+                        <ul className="list-disc pl-5 space-y-1.5 font-sans">
+                          <li><strong className="text-slate-900">Quadro de Horários Central:</strong> Exibe a grade real da turma ou sala especial selecionada. Cada dia contém aulas do turno correspondente (Manhã: períodos 1 a 6; Tarde: períodos 7 a 12).</li>
+                          <li><strong className="text-slate-900">Seletores Extras na Barra Superior:</strong> Você pode alterar o Nome da Escola e a Logomarca clicando neles diretamente, facilitando a emissão de relatórios escolares impressos personalizados.</li>
+                          <li><strong className="text-slate-900">Troca de Modos de Visualização:</strong> Exiba a grade consolidada por <strong>Turma</strong> ou mude para conferir o agendamento em <strong>Salas Especiais / Laboratórios</strong>.</li>
+                          <li><strong className="text-slate-900">Controles de Exportação e Backup (Action Row inferior):</strong> Salve dados no navegador, importe um arquivo JSON salvando as modificações completas, exporte backups de segurança e imprima os quadros por turma com excelente qualidade gráfica.</li>
+                        </ul>
+                        <div className="p-3.5 bg-indigo-50 border border-indigo-100 rounded-2xl text-indigo-805 flex gap-2">
+                          <Info className="w-4 h-4 mt-0.5 shrink-0 text-indigo-500" />
+                          <div className="text-[11px] leading-relaxed">
+                            <span className="font-bold uppercase tracking-wide block mb-0.5">🔔 DICA RÁPIDA DE USO:</span>
+                            A grade salva automaticamente rascunhos no seu navegador. No entanto, para persistir de forma permanente ou compartilhar entre computadores, utilize sempre o botão <strong className="uppercase">Salvar Alterações</strong> no canto superior direito e faça o download do JSON de backup de tempos em tempos.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {helpActiveTab === 'disciplinas' && (
+                    <div className="space-y-4 animate-in fade-in duration-200">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 border-b-2 border-slate-100 pb-2">
+                        <BookOpen className="w-4 h-4 text-emerald-600 animate-bounce" />
+                        2. Gerenciamento e Regras de Disciplinas
+                      </h4>
+                      <div className="space-y-3 text-xs text-slate-600 font-sans leading-relaxed">
+                        <p>
+                          O sistema possui um motor inteligente que impede o agendamento incorreto de matérias em séries ou turmas para as quais elas não foram criadas. Agora você pode parametrizar restrições com alta precisão ao adicionar ou editar qualquer disciplina:
+                        </p>
+                        
+                        <div className="space-y-3.5">
+                          {/* Item 1 */}
+                          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                            <h5 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] flex items-center gap-1.5 font-sans">
+                              <div className="w-1.5 h-3 bg-blue-500 rounded-full"></div>
+                              A. Restrição por Nível de Ensino (Médio vs Fundamental)
+                            </h5>
+                            <p className="text-[11px] text-slate-500 pl-3 leading-relaxed">
+                              Configure se a matéria é de uso <strong className="text-slate-850">Geral (Ambos os níveis)</strong>, exclusivo para as séries do <strong className="text-slate-850">Ensino Fundamental II (6º ao 9º Ano)</strong> ou restrita ao <strong className="text-slate-850">Ensino Médio (1º ao 3º Ano)</strong>. 
+                              <br />
+                              <span className="text-amber-600 font-medium font-sans italic text-[10px]">* Regra rígida nativa:</span> Filosofia e Sociologia são bloqueadas para o Ensino Fundamental por padrão, evitando inclusões desatentas. Outras disciplinas customizadas respeitarão estritamente esta validação durante a geração automática ou manual.
+                            </p>
+                          </div>
+
+                          {/* Item 2 */}
+                          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                            <h5 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] flex items-center gap-1.5 font-sans">
+                              <div className="w-1.5 h-3 bg-amber-500 rounded-full"></div>
+                              B. Filtro por Séries Específicas
+                            </h5>
+                            <p className="text-[11px] text-slate-500 pl-3 leading-relaxed">
+                              Permite escrever as séries válidas separadas por vírgula (ex: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono text-[9px] font-bold">6, 6º</code>). O sistema analisa o nome da turma para validar se a disciplina pertence àquela série curricular.
+                              <br />
+                              <span className="text-amber-600 font-medium font-sans italic text-[10px]">* Regra padrão:</span> O Ensino Religioso é nativamente restrito apenas a turmas com o termo "6", mas agora você pode aplicar essa mesma lógica a qualquer série ou disciplina nova que inserir no painel.
+                            </p>
+                          </div>
+
+                          {/* Item 3 */}
+                          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                            <h5 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] flex items-center gap-1.5 font-sans">
+                              <div className="w-1.5 h-3 bg-indigo-500 rounded-full"></div>
+                              C. Restrição por Sufixo / Siglas do Nome de Turma
+                            </h5>
+                            <p className="text-[11px] text-slate-500 pl-3 leading-relaxed">
+                              Ideal para itinerários formativos, trilhas de aprofundamento técnico ou disciplinas eletivas específicas. Digite siglas separadas por vírgula (como <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono text-[9px] font-bold">B, Integral</code>).
+                              <br />
+                              <span className="text-amber-600 font-medium font-sans italic text-[10px]">* Exemplo Prático:</span> Matérias profissionalizantes como <strong>Marketing</strong> podem ser configuradas para só entrarem em turmas que possuam a sigla "B" no seu identificador. Se uma turma não tiver o sufixo cadastrado em seu nome (ex: "1º Ano A"), ela não receberá essa aula.
+                            </p>
+                          </div>
+
+                          {/* Item 4 */}
+                          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
+                            <h5 className="font-bold text-slate-900 uppercase tracking-wide text-[10px] flex items-center gap-1.5 font-sans">
+                              <div className="w-1.5 h-3 bg-emerald-500 rounded-full"></div>
+                              D. Vínculo Exclusivo de Whitelist (Checkboxes)
+                            </h5>
+                            <p className="text-[11px] text-slate-500 pl-3 leading-relaxed">
+                              Caso queira um controle absoluto sobre quem terá a disciplina, você pode marcar diretamente na lista de caixas de seleção apenas as turmas válidas. Se marcar alguma turma ali, o filtro automático por série e sufixo é ignorado em prol desta sua escolha manual cirúrgica de turmas recomendadas.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {helpActiveTab === 'professores' && (
+                    <div className="space-y-4 animate-in fade-in duration-200">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 border-b-2 border-slate-100 pb-2">
+                        <Users className="w-4 h-4 text-indigo-600 animate-bounce" />
+                        3. Cadastro de Professores e Disponibilidade
+                      </h4>
+                      <div className="space-y-3 text-xs text-slate-600 font-sans leading-relaxed">
+                        <p>
+                          Os professores guiam a alocação de tempos do colégio. Configurar corretamente a ficha de cada um garante que o robô de horários trabalhe em harmonia estrita:
+                        </p>
+                        
+                        <ul className="list-disc pl-5 space-y-1.5 font-sans">
+                          <li><strong>Múltiplas Disciplinas:</strong> Um professor de química também pode lecionar física ou matemática. Marque todas as aplicáveis no momento do cadastro do docente!</li>
+                          <li><strong>Preferência de Geminação (Aulas Gêmeas):</strong> Se ativado, o sistema prefere alocar aulas desse professor seguidas (lado a lado na mesma turma), favorecendo o desenvolvimento contínuo do plano didático sem quebras.</li>
+                          <li><strong>Vínculo de Turmas (Opcional):</strong> Caso o professor lecione somente a um grupo seleto de turmas, vincule-as para que ele não receba aulas de outras turmas acidentalmente. Se deixar vazio, ele estará habilitado a dar aula para todas as turmas que possuem disciplinas compatíveis.</li>
+                        </ul>
+
+                        <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl space-y-2">
+                          <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider block font-sans">📆 Como Gerenciar a Grade de Disponibilidade:</span>
+                          <p className="text-[11px] leading-relaxed font-sans">
+                            A grade de disponibilidade de cada professor é exibida no cadastro de forma quadriculada para cada dia útil (segunda a sexta-feira).
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 text-[10px] font-sans">
+                            <div className="flex items-center gap-2 p-2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl">
+                              <div className="w-3 h-3 bg-emerald-500 rounded border border-emerald-700 shrink-0"></div>
+                              <span><strong>Verde (Disponível):</strong> O professor está livre para receber aulas nestes períodos.</span>
+                            </div>
+                            <div className="flex items-center gap-2 p-2 bg-slate-100 text-slate-700 border border-slate-300 rounded-xl">
+                              <div className="w-3 h-3 bg-slate-200 rounded border border-slate-400 shrink-0"></div>
+                              <span><strong>Cinza (Bloqueado):</strong> Horário inválido (ex: o professor está em outro colégio ou de folga nestes períodos).</span>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-medium leading-normal italic pt-1 text-center font-sans">
+                            * DICA: Clique em um quadrado cinza para torná-lo verde e vice-versa. Certifique-se de disponibilizar períodos suficientes para a carga horária que o professor precisa ministrar!
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {helpActiveTab === 'turmas_salas' && (
+                    <div className="space-y-4 animate-in fade-in duration-200">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 border-b-2 border-slate-100 pb-2">
+                        <Calendar className="w-4 h-4 text-blue-600 animate-bounce" />
+                        4. Cadastro de Turmas e Salas Especiais
+                      </h4>
+                      <div className="space-y-3 text-xs text-slate-600 font-sans leading-relaxed">
+                        <p>
+                          O cadastro correto de onde os alunos assistirão às aulas e como suas turmas estão identificadas é capital para a validação da grade de horários:
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-sans">
+                          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                            <span className="text-[10px] font-black text-indigo-700 uppercase block tracking-wider mb-1">A. Gestão de Turmas</span>
+                            <p className="text-[11px] leading-relaxed">
+                              Cada turma representa uma classe (Ex: <strong>6º Ano A</strong>, <strong>1º Ano E.M. B</strong>).
+                              Ao cadastrar ou editar uma turma, você especifica seu <strong>Turno</strong> oficial:
+                            </p>
+                            <ul className="list-disc pl-4 space-y-1 text-[10px] mt-1.5 text-slate-500">
+                              <li><strong>Manhã:</strong> Aulas alocadas nos períodos de 1 a 6.</li>
+                              <li><strong>Tarde:</strong> Aulas alocadas nos períodos de 7 a 12.</li>
+                              <li><strong>Ambos os turnos:</strong> Pode receber aulas em qualquer um dos 12 períodos do dia se houver necessidade.</li>
+                            </ul>
+                          </div>
+
+                          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                            <span className="text-[10px] font-black text-purple-700 uppercase block tracking-wider mb-1 font-sans">B. Salas Especiais e Laboratórios</span>
+                            <p className="text-[11px] leading-relaxed">
+                              Útil para agendar o uso rotativo de estruturas compartilhadas, tais como:
+                            </p>
+                            <ul className="list-disc pl-4 space-y-1 text-[10px] mt-1.5 text-slate-500 font-sans">
+                              <li>Laboratório de Informática (Lab Comp)</li>
+                              <li>Carrinho de Chromebooks / Tablets (Lab Tab)</li>
+                              <li>Sala Especial de Matemática (Sala Mat)</li>
+                            </ul>
+                            <p className="text-[10px] mt-2 leading-relaxed text-slate-500 border-t border-slate-200/60 pt-1.5 font-medium">
+                              Ao desenhar Disciplinas, você aponta se elas <strong>restringem ou requerem</strong> o agendamento em algum desses laboratórios/salas. O sistema então cuida para que duas turmas diferentes não fiquem alocadas no mesmo laboratório no mesmo momento!
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {helpActiveTab === 'geracao' && (
+                    <div className="space-y-4 animate-in fade-in duration-200">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 border-b-2 border-slate-100 pb-2">
+                        <Sparkles className="w-4 h-4 text-emerald-600 animate-bounce" />
+                        5. Motor de Geração Automática
+                      </h4>
+                      <div className="space-y-3 text-xs text-slate-600 font-sans leading-relaxed">
+                        <p>
+                          O grande trunfo do sistema reside em seu gerador inteligente. Ele calcula centenas de combinações em milissegundos para propor a melhor grade de aulas possível.
+                        </p>
+                        
+                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                          <span className="text-[10px] font-black text-amber-900 uppercase block tracking-wider mb-1 font-sans">Engrenagens da Ferramenta de IA:</span>
+                          <p className="text-[11px] leading-relaxed">
+                            Ao clicar em <strong className="uppercase">Gerar Automaticamente</strong> no menu superior, você verá um painel com parâmetros de refinamento:
+                          </p>
+                          <ul className="list-disc pl-5 mt-2 space-y-1.5 text-[11px] text-slate-700">
+                            <li><strong className="text-slate-900">Modo "Do Zero":</strong> Limpa completamente a grade do colégio inteiro e faz uma nova organização ideal a nível global.</li>
+                            <li><strong className="text-slate-900">Modo "Apenas Vazios":</strong> Preserva as aulas que você inseriu manualmente na grade, agendando de forma inteligente somente as pendentes nos espaços em branco.</li>
+                            <li><strong className="text-slate-900">Filtro por Turnos:</strong> Permite escolher processar e organizar apenas as turmas da manhã, apenas as turmas da tarde ou ambas juntas de uma vez.</li>
+                            <li><strong className="text-slate-900">Otimizar Apenas Laboratórios/Salas:</strong> Roda o algoritmo de inteligência focando estritamente na distribuição de uso eficaz dos laboratórios de informática, tablets e demais recursos de sala especial compartilhados!</li>
+                          </ul>
+                        </div>
+
+                        <p className="text-[10px] text-slate-400 font-sans italic leading-normal">
+                          * Nota: Se o algoritmo sinalizar que não conseguiu alocar certas matérias, ele exibirá uma listagem detalhada apontando exatamente o motivo no final da execução (geralmente choque de disponibilidade do docente ou falta de salas livres).
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {helpActiveTab === 'validacoes' && (
+                    <div className="space-y-4 animate-in fade-in duration-200">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 border-b-2 border-slate-100 pb-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 animate-bounce" />
+                        6. Diagnósticos de Grade, Conflitos e Aulas Faltantes
+                      </h4>
+                      <div className="space-y-3 text-xs text-slate-600 font-sans leading-relaxed">
+                        <p>
+                          Para garantir a segurança acadêmica do seu planejamento escolar, incluímos um sistema avançado de alertas em tempo real. Ele avisa instantaneamente sempre que houver inconsistências na sua montagem manual:
+                        </p>
+
+                        <div className="space-y-3.5 font-sans text-xs">
+                          {/* Alerta 1 */}
+                          <div className="flex gap-3 p-3 bg-red-50 border border-red-100 rounded-2xl text-red-800">
+                            <AlertCircle className="w-5 h-5 shrink-0 text-red-500 mt-0.5" />
+                            <div>
+                              <strong className="text-[10px] font-black uppercase tracking-wide block mb-0.5 font-sans">Disponibilidade Estrita do Professor:</strong>
+                              Caso você tente arrastar um professor para lecionar em um horário que ele marcou como indisponível (cinza) no seu cadastro, o sistema irá bloquear e exibir um alerta, mantendo a integridade dos acordos trabalhistas do seu docente.
+                            </div>
+                          </div>
+
+                          {/* Alerta 2 */}
+                          <div className="flex gap-3 p-3 bg-amber-50 border border-amber-100 rounded-2xl text-amber-805">
+                            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+                            <div>
+                              <strong className="text-[10px] font-black uppercase tracking-wide block mb-0.5 font-sans">Estouro de Carga Horária Exigida:</strong>
+                              O monitoramento do dashboard emitirá avisos se a soma das aulas alocadas para uma disciplina na grade horária superar a carga total definida por matriz curricular.
+                            </div>
+                          </div>
+
+                          {/* Alerta 3 */}
+                          <div className="flex gap-3 p-3 bg-indigo-50 border border-indigo-150 rounded-2xl text-indigo-805">
+                            <Info className="w-5 h-5 shrink-0 text-indigo-500 mt-0.5" />
+                            <div>
+                              <strong className="text-[10px] font-black uppercase tracking-wide block mb-0.5 font-sans">Módulo "Aulas Faltantes":</strong>
+                              Clique no botão <strong className="uppercase">Aulas Faltantes</strong> na barra superior a qualquer momento. Ele abre uma tabela interativa que exibe, disciplina por disciplina e turma por turma, quantas aulas ainda faltam para atingir a conformidade requerida do plano de ensino.
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-slate-50 p-4 border-t-2 border-slate-900 flex justify-between items-center shrink-0">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest font-mono">
+                  SISTEMA DE GESTÃO ESCOLAR INTEGRADA COGNITIVA
+                </span>
+                <button
+                  onClick={() => setIsHelpModalOpen(false)}
+                  className="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 rounded-xl text-xs font-black uppercase tracking-wider transition-all border-2 border-slate-900 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:translate-y-[-1px] hover:translate-x-[-1px] active:translate-y-0 active:translate-x-0 active:shadow-none"
+                >
+                  Entendi, fechar tutorial!
+                </button>
               </div>
             </motion.div>
           </div>
