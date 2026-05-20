@@ -4146,10 +4146,45 @@ export default function ScheduleGenerator() {
                 {(() => {
                   let overallExpected = 0;
                   let overallAllocated = 0;
-                  const normalTurmas = turmas.filter(t => !t.isRoom);
+                  let metricTurmas = turmas.filter(t => !t.isRoom);
 
-                  normalTurmas.forEach(t => {
+                  // Apply shift filters to metrics
+                  if (missingClassesShift === 'manha') {
+                    metricTurmas = metricTurmas.filter(t => {
+                      if (t.shift) return t.shift === 'manha';
+                      return !t.name.toLowerCase().includes('tarde') && !t.id.toLowerCase().includes('tarde');
+                    });
+                  } else if (missingClassesShift === 'tarde') {
+                    metricTurmas = metricTurmas.filter(t => {
+                      if (t.shift) return t.shift === 'tarde';
+                      return t.name.toLowerCase().includes('tarde') || t.id.toLowerCase().includes('tarde');
+                    });
+                  }
+
+                  // Apply search filter to metrics
+                  if (missingClassesSearch.trim()) {
+                    const searchLower = missingClassesSearch.toLowerCase();
+                    metricTurmas = metricTurmas.filter(t => {
+                      const matchesTurma = t.name.toLowerCase().includes(searchLower);
+                      const matchesSubject = subjects.some(s => {
+                        const hasThisSubject = s.customWorkloads?.[t.id] ? s.customWorkloads[t.id].workload > 0 : s.workload > 0;
+                        return hasThisSubject && s.name.toLowerCase().includes(searchLower);
+                      });
+                      return matchesTurma || matchesSubject;
+                    });
+                  }
+
+                  metricTurmas.forEach(t => {
                     subjects.forEach(s => {
+                      // If searching, restrict counted workloads to matching elements
+                      if (missingClassesSearch.trim()) {
+                        const sNameLower = s.name.toLowerCase();
+                        const tNameLower = t.name.toLowerCase();
+                        const searchLower = missingClassesSearch.toLowerCase();
+                        if (!sNameLower.includes(searchLower) && !tNameLower.includes(searchLower)) {
+                          return;
+                        }
+                      }
                       const { total, usage } = getClassSubjectWorkload(t.id, s.id);
                       overallExpected += total;
                       overallAllocated += usage;
@@ -4339,7 +4374,16 @@ export default function ScheduleGenerator() {
                     const sortedClassSubjects = [...classSubjects]
                       .filter(item => {
                         if (missingClassesSearch.trim()) {
-                          return item.subject.name.toLowerCase().includes(missingClassesSearch.toLowerCase());
+                          const sNameLower = item.subject.name.toLowerCase();
+                          const tNameLower = turma.name.toLowerCase();
+                          const searchLower = missingClassesSearch.toLowerCase();
+                          return sNameLower.includes(searchLower) || tNameLower.includes(searchLower);
+                        }
+                        return true;
+                      })
+                      .filter(item => {
+                        if (missingClassesOnlyPending) {
+                          return item.missingCount > 0;
                         }
                         return true;
                       })
