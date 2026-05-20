@@ -122,6 +122,7 @@ export default function ScheduleGenerator() {
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [isEditingWaPhone, setIsEditingWaPhone] = useState(false);
   const [tempWaPhone, setTempWaPhone] = useState('');
+  const [showSecurityToast, setShowSecurityToast] = useState(false);
   
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
   const [viewMode, setViewMode] = useState<'turmas' | 'rooms'>('turmas');
@@ -276,6 +277,45 @@ export default function ScheduleGenerator() {
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
+
+  // Prevenção de botão direito e atalhos de inspeção (segurança de dados)
+  useEffect(() => {
+    let toastTimeout: NodeJS.Timeout;
+    
+    const blockMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      setShowSecurityToast(true);
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => setShowSecurityToast(false), 2500);
+    };
+
+    const blockInspectKeys = (e: KeyboardEvent) => {
+      const isF12 = e.key === 'F12';
+      // Ctrl + Shift + I / J / C
+      const isInspectCombo = e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c');
+      // Ctrl + U (exibir código fonte)
+      const isSourceCombo = e.ctrlKey && (e.key === 'U' || e.key === 'u');
+      // Ctrl + S (salvar página)
+      const isSaveCombo = e.ctrlKey && (e.key === 'S' || e.key === 's');
+
+      if (isF12 || isInspectCombo || isSourceCombo || isSaveCombo) {
+        e.preventDefault();
+        setShowSecurityToast(true);
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => setShowSecurityToast(false), 2500);
+        return false;
+      }
+    };
+
+    document.addEventListener('contextmenu', blockMenu);
+    window.addEventListener('keydown', blockInspectKeys);
+
+    return () => {
+      document.removeEventListener('contextmenu', blockMenu);
+      window.removeEventListener('keydown', blockInspectKeys);
+      clearTimeout(toastTimeout);
+    };
   }, []);
 
   // Synchronize selected turma when shift changes or list changes
@@ -5465,6 +5505,28 @@ export default function ScheduleGenerator() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast de Segurança (Bloqueio de Informações / Botão Direito) */}
+      <AnimatePresence>
+        {showSecurityToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-[100] flex items-center gap-3 bg-slate-900 border-2 border-slate-900 p-4 rounded-2xl shadow-[4px_4px_0px_0px_rgba(239,68,68,1)] text-white w-full max-w-xs md:max-w-sm"
+          >
+            <div className="p-1.5 bg-red-500 rounded-lg text-white shrink-0">
+              <AlertTriangle className="w-4 h-4 text-white animate-pulse" />
+            </div>
+            <div>
+              <h5 className="text-[9px] font-black uppercase tracking-widest text-red-400">Acesso Restrito</h5>
+              <p className="text-[10px] font-bold text-slate-100 font-sans leading-snug mt-0.5">
+                O clique direito e atalhos de depuração foram desativados para segurança e integridade do banco de dados curricular.
+              </p>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
