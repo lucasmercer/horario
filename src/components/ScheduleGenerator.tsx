@@ -189,12 +189,19 @@ export default function ScheduleGenerator() {
   const [newRoomColor, setNewRoomColor] = useState('#6366f1');
   const [isPrintingTurmaSelection, setIsPrintingTurmaSelection] = useState(false);
   const [isClearingSelection, setIsClearingSelection] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    cancelText?: string;
+  } | null>(null);
   const [isShowingMissingClasses, setIsShowingMissingClasses] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [helpActiveTab, setHelpActiveTab] = useState('geral');
   const [isAutoGenerateResultsMinimized, setIsAutoGenerateResultsMinimized] = useState(false);
   const [missingClassesSearch, setMissingClassesSearch] = useState('');
-  const [missingClassesShift, setMissingClassesShift] = useState<'todos' | 'manha' | 'tarde'>('todos');
+  const [missingClassesShift, setMissingClassesShift] = useState<'todos' | 'manha' | 'tarde' | 'noite'>('todos');
   const [missingClassesOnlyPending, setMissingClassesOnlyPending] = useState(true);
   const [newTurmaName, setNewTurmaName] = useState('');
   const [newTurmaShift, setNewTurmaShift] = useState<'manha' | 'tarde' | 'noite' | 'todas'>('todas');
@@ -634,9 +641,8 @@ export default function ScheduleGenerator() {
         
         if (hasSomeData) {
           const isCurrentAppEmpty = teachers.length === 0 && subjects.length === 0;
-          const userConfirmed = isCurrentAppEmpty || confirm('ATENÇÃO: A importação de backup irá substituir TODOS os dados atuais (professores, matérias e horários). Deseja continuar?');
           
-          if (userConfirmed) {
+          const proceedWithImport = () => {
             // Ensure all data is set, providing defaults for older backups
             setTeachers(data.teachers || []);
             
@@ -726,6 +732,18 @@ export default function ScheduleGenerator() {
             }
             
             alert('Backup restaurado com sucesso! Todos os dados foram atualizados.');
+          };
+
+          if (isCurrentAppEmpty) {
+            proceedWithImport();
+          } else {
+            setConfirmConfig({
+              title: 'Substituir Dados Atuais',
+              message: 'ATENÇÃO: A importação de backup irá substituir TODOS os dados atuais (professores, matérias e horários). Deseja continuar?',
+              confirmText: 'Importar',
+              cancelText: 'Cancelar',
+              onConfirm: proceedWithImport
+            });
           }
         } else {
           alert('Arquivo de backup de formato desconhecido. Certifique-se de usar um arquivo .txt gerado por este sistema.');
@@ -2070,10 +2088,11 @@ export default function ScheduleGenerator() {
   const handlePrintLabsHorizontal = () => {
     const timeRangesManha = ["7h30 às 8h20", "8h20 às 9h10", "9h10 às 10h", "10h20 às 11h10", "11h10 às 12h", "12h às 12h50"];
     const timeRangesTarde = ["13h às 13h50", "13h50 às 14h40", "14h40 às 15h30", "15h50 às 16h40", "16h40 às 17h30", "17h30 às 18h20"];
+    const timeRangesNoite = ["19h às 19h45", "19h45 às 20h30", "20h30 às 21h15", "21h25 às 22h10", "22h10 às 22h55", "22h55 às 23h40"];
     
-    const generateTable = (shift: 'manha' | 'tarde') => {
-      const periods = shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
-      const timeRanges = shift === 'manha' ? timeRangesManha : timeRangesTarde;
+    const generateTable = (shift: 'manha' | 'tarde' | 'noite') => {
+      const periods = shift === 'noite' ? PERIODS_NOITE : shift === 'manha' ? PERIODS_MANHA : PERIODS_TARDE;
+      const timeRanges = shift === 'noite' ? timeRangesNoite : shift === 'manha' ? timeRangesManha : timeRangesTarde;
       
       const specialRooms = turmas.filter(t => t.isRoom);
 
@@ -2090,7 +2109,7 @@ export default function ScheduleGenerator() {
             </div>
           </div>
 
-          <h2 class="period-title">PERÍODO: ${shift === 'manha' ? 'MANHÃ' : 'TARDE'}</h2>
+          <h2 class="period-title">PERÍODO: ${shift === 'manha' ? 'MANHÃ' : shift === 'tarde' ? 'TARDE' : 'NOITE'}</h2>
           
           <div class="table-wrapper">
             <table>
@@ -2134,7 +2153,7 @@ export default function ScheduleGenerator() {
                     </tr>
                     ${pIdx === 2 ? `
                       <tr class="interval-row">
-                        <td colspan="2" class="interval-time">${shift === 'manha' ? '10:00 - 10:20' : '15:30 - 15:50'}</td>
+                        <td colspan="2" class="interval-time">${shift === 'manha' ? '10:00 - 10:20' : shift === 'tarde' ? '15:30 - 15:50' : '21:15 - 21:25'}</td>
                         <td colspan="${specialRooms.length}" class="interval-text">INTERVALO</td>
                       </tr>
                     ` : ''}
@@ -2161,6 +2180,7 @@ export default function ScheduleGenerator() {
       <div style="padding: 0px;">
         ${generateTable('manha')}
         ${generateTable('tarde')}
+        ${enableNoite ? generateTable('noite') : ''}
       </div>
     `;
 
@@ -2184,7 +2204,7 @@ export default function ScheduleGenerator() {
                 padding: 0; 
                 background: white; 
                 height: 100%;
-                overflow: hidden;
+                overflow: visible !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
               }
@@ -2476,7 +2496,7 @@ export default function ScheduleGenerator() {
                 -webkit-print-color-adjust: exact; 
                 print-color-adjust: exact; 
                 height: 100%;
-                overflow: hidden;
+                overflow: visible !important;
               }
               
               .print-container { 
@@ -2627,7 +2647,7 @@ export default function ScheduleGenerator() {
                 padding: 0; 
                 background: white; 
                 height: 100%;
-                overflow: hidden;
+                overflow: visible !important;
               }
               .print-container { 
                 page-break-after: always; 
@@ -3054,7 +3074,13 @@ export default function ScheduleGenerator() {
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (confirm(`Remover turma ${t.name}?`)) removeTurma(t.id);
+                              setConfirmConfig({
+                                title: 'Remover Turma',
+                                message: `Deseja realmente remover a turma ${t.name}? Isso também apagará as alocações de horários vinculadas a ela.`,
+                                confirmText: 'Remover',
+                                cancelText: 'Cancelar',
+                                onConfirm: () => removeTurma(t.id)
+                              });
                             }}
                             className="print:hidden opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-all"
                           >
@@ -3560,7 +3586,7 @@ export default function ScheduleGenerator() {
                   >
                     <div className="flex flex-col text-left">
                       <span className="text-sm font-black text-slate-800">{turma.name}</span>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift === 'manha' ? 'MANHÃ' : turma.shift === 'tarde' ? 'TARDE' : 'Período indefinido'}</span>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift === 'manha' ? 'MANHÃ' : turma.shift === 'tarde' ? 'TARDE' : turma.shift === 'noite' ? 'NOITE' : 'Período indefinido'}</span>
                     </div>
                     <Printer className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
                   </button>
@@ -3599,11 +3625,17 @@ export default function ScheduleGenerator() {
               <div className="grid grid-cols-1 gap-3 max-h-[60vh] overflow-y-auto px-1 custom-scrollbar">
                 <button 
                   onClick={() => {
-                    if (confirm('ATENÇÃO: Isso irá apagar os horários de TODAS as turmas sem afetar professores ou disciplinas. Deseja realmente limpar tudo?')) {
-                      setSchedules({});
-                      incrementVersion();
-                      setIsClearingSelection(false);
-                    }
+                    setConfirmConfig({
+                      title: 'Limpar Todos os Horários',
+                      message: 'ATENÇÃO: Isso irá apagar os horários de TODAS as turmas sem afetar professores ou disciplinas. Deseja realmente limpar tudo?',
+                      confirmText: 'Limpar Tudo',
+                      cancelText: 'Cancelar',
+                      onConfirm: () => {
+                        setSchedules({});
+                        incrementVersion();
+                        setIsClearingSelection(false);
+                      }
+                    });
                   }}
                   className="flex flex-col items-center justify-center p-6 bg-orange-50 text-orange-600 rounded-2xl hover:bg-orange-100 transition-all group border-2 border-orange-200/50"
                 >
@@ -3622,21 +3654,27 @@ export default function ScheduleGenerator() {
                     <button 
                       key={turma.id}
                       onClick={() => {
-                        if (confirm(`Limpar todos os horários da turma ${turma.name}?`)) {
-                          setSchedules(prev => {
-                            const next = { ...prev };
-                            delete next[turma.id];
-                            return next;
-                          });
-                          incrementVersion();
-                          setIsClearingSelection(false);
-                        }
+                        setConfirmConfig({
+                          title: 'Limpar Horários da Turma',
+                          message: `Deseja realmente limpar todos os horários da turma ${turma.name}?`,
+                          confirmText: 'Limpar',
+                          cancelText: 'Cancelar',
+                          onConfirm: () => {
+                            setSchedules(prev => {
+                              const next = { ...prev };
+                              delete next[turma.id];
+                              return next;
+                            });
+                            incrementVersion();
+                            setIsClearingSelection(false);
+                          }
+                        });
                       }}
                       className="flex items-center justify-between p-4 bg-white border-2 border-slate-100 rounded-2xl hover:border-amber-400 hover:bg-amber-50 transition-all group"
                     >
                       <div className="flex flex-col text-left">
                         <span className="text-sm font-black text-slate-800">{turma.name}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift === 'manha' ? 'MANHÃ' : turma.shift === 'tarde' ? 'TARDE' : 'Período indefinido'}</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">{turma.shift === 'manha' ? 'MANHÃ' : turma.shift === 'tarde' ? 'TARDE' : turma.shift === 'noite' ? 'NOITE' : 'Período indefinido'}</span>
                       </div>
                       <Trash2 className="w-4 h-4 text-slate-300 group-hover:text-amber-500 transition-colors" />
                     </button>
@@ -3834,11 +3872,15 @@ export default function ScheduleGenerator() {
                             />
                             <button 
                               onClick={() => {
-                                if (confirm(`Deseja remover a sala ${room.name}? Isso apagará os horários desta sala.`)) {
-                                  removeTurma(room.id);
-                                }
+                                setConfirmConfig({
+                                  title: 'Remover Sala Especial',
+                                  message: `Deseja realmente remover a sala ${room.name}? Isso também apagará as alocações de horários vinculadas a ela.`,
+                                  confirmText: 'Remover',
+                                  cancelText: 'Cancelar',
+                                  onConfirm: () => removeTurma(room.id)
+                                });
                               }}
-                              className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                              className="p-2 text-slate-305 hover:text-red-500 transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -4724,12 +4766,17 @@ export default function ScheduleGenerator() {
                   if (missingClassesShift === 'manha') {
                     metricTurmas = metricTurmas.filter(t => {
                       if (t.shift) return t.shift === 'manha';
-                      return !t.name.toLowerCase().includes('tarde') && !t.id.toLowerCase().includes('tarde');
+                      return !t.name.toLowerCase().includes('tarde') && !t.id.toLowerCase().includes('tarde') && !t.name.toLowerCase().includes('noite') && !t.id.toLowerCase().includes('noite');
                     });
                   } else if (missingClassesShift === 'tarde') {
                     metricTurmas = metricTurmas.filter(t => {
                       if (t.shift) return t.shift === 'tarde';
-                      return t.name.toLowerCase().includes('tarde') || t.id.toLowerCase().includes('tarde');
+                      return (t.name.toLowerCase().includes('tarde') || t.id.toLowerCase().includes('tarde')) && !t.name.toLowerCase().includes('noite') && !t.id.toLowerCase().includes('noite');
+                    });
+                  } else if (missingClassesShift === 'noite') {
+                    metricTurmas = metricTurmas.filter(t => {
+                      if (t.shift) return t.shift === 'noite';
+                      return t.name.toLowerCase().includes('noite') || t.id.toLowerCase().includes('noite');
                     });
                   }
 
@@ -4892,6 +4939,15 @@ export default function ScheduleGenerator() {
                     >
                       Tarde
                     </button>
+                    {enableNoite && (
+                      <button
+                        id="btn-missing-classes-shift-noite"
+                        onClick={() => setMissingClassesShift('noite')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all cursor-pointer ${missingClassesShift === 'noite' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                      >
+                        Noite
+                      </button>
+                    )}
                   </div>
 
                   {/* Toggle only pending */}
@@ -4940,12 +4996,17 @@ export default function ScheduleGenerator() {
                   if (missingClassesShift === 'manha') {
                     filteredTurmas = filteredTurmas.filter(t => {
                       if (t.shift) return t.shift === 'manha';
-                      return !t.name.toLowerCase().includes('tarde') && !t.id.toLowerCase().includes('tarde');
+                      return !t.name.toLowerCase().includes('tarde') && !t.id.toLowerCase().includes('tarde') && !t.name.toLowerCase().includes('noite') && !t.id.toLowerCase().includes('noite');
                     });
                   } else if (missingClassesShift === 'tarde') {
                     filteredTurmas = filteredTurmas.filter(t => {
                       if (t.shift) return t.shift === 'tarde';
-                      return t.name.toLowerCase().includes('tarde') || t.id.toLowerCase().includes('tarde');
+                      return (t.name.toLowerCase().includes('tarde') || t.id.toLowerCase().includes('tarde')) && !t.name.toLowerCase().includes('noite') && !t.id.toLowerCase().includes('noite');
+                    });
+                  } else if (missingClassesShift === 'noite') {
+                    filteredTurmas = filteredTurmas.filter(t => {
+                      if (t.shift) return t.shift === 'noite';
+                      return t.name.toLowerCase().includes('noite') || t.id.toLowerCase().includes('noite');
                     });
                   }
 
@@ -5043,7 +5104,7 @@ export default function ScheduleGenerator() {
                             <div className="min-w-[4.25rem] px-2 h-11 rounded-xl bg-slate-900 flex flex-col items-center justify-center text-white font-black shrink-0">
                               <span className="text-[11px] font-extrabold uppercase tracking-tight leading-none text-center whitespace-nowrap">{turma.name}</span>
                               <span className="text-[6.5px] font-bold uppercase tracking-widest text-slate-300 mt-1 font-sans">
-                                {turma.shift === 'manha' ? 'MAN' : 'TAR'}
+                                {turma.shift === 'manha' ? 'MAN' : turma.shift === 'tarde' ? 'TAR' : 'NOI'}
                               </span>
                             </div>
                             <div>
@@ -5051,7 +5112,7 @@ export default function ScheduleGenerator() {
                                 Turma {turma.name}
                               </h4>
                               <div className="flex items-center gap-1.5 mt-1 text-[8px] font-bold text-slate-400 uppercase tracking-wider font-sans leading-none">
-                                <span>{turma.shift === 'manha' ? 'Período da Manhã' : 'Período da Tarde'}</span>
+                                <span>{turma.shift === 'manha' ? 'Período da Manhã' : turma.shift === 'tarde' ? 'Período da Tarde' : 'Período da Noite'}</span>
                                 <span>•</span>
                                 <span className={classMissing > 0 ? 'text-amber-600 font-black' : 'text-green-600'}>
                                   {classMissing > 0 ? `Faltam ${classMissing} aulas` : 'Grade Completa'}
@@ -5838,6 +5899,45 @@ export default function ScheduleGenerator() {
               </p>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Confirmation Modal */}
+      <AnimatePresence>
+        {confirmConfig && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4 border-2 border-slate-900 text-left"
+            >
+              <h4 className="text-base font-black text-slate-900 uppercase tracking-tight">
+                {confirmConfig.title}
+              </h4>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-tight leading-normal">
+                {confirmConfig.message}
+              </p>
+              <div className="flex gap-2 justify-end pt-2">
+                <button 
+                  onClick={() => setConfirmConfig(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                >
+                  {confirmConfig.cancelText || 'Cancelar'}
+                </button>
+                <button 
+                  onClick={() => {
+                    const cb = confirmConfig.onConfirm;
+                    setConfirmConfig(null);
+                    cb();
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 hover:scale-102 border-2 border-red-800 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-[2px_2px_0px_0px_rgba(220,38,38,0.15)] cursor-pointer"
+                >
+                  {confirmConfig.confirmText || 'Confirmar'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
